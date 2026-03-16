@@ -8,7 +8,8 @@ const { spawnSync } = require("node:child_process");
 const cliPath = path.resolve(__dirname, "..", "dist", "cli.js");
 const exampleSkillDir = path.resolve(__dirname, "..", "examples", "weather-research-skill");
 
-async function runCliBenchmark(iterations = 5) {
+async function runCliBenchmark(iterations = 5, options = {}) {
+  const silent = options.silent === true;
   const lintSamples = [];
   const roundTripSamples = [];
 
@@ -22,13 +23,15 @@ async function runCliBenchmark(iterations = 5) {
     roundTrip: summarizeDurations(roundTripSamples)
   };
 
-  console.log("CLI benchmark");
-  console.log(
-    `  lint x${iterations}: min ${summary.lint.minMs.toFixed(1)}ms, p50 ${summary.lint.p50Ms.toFixed(1)}ms, avg ${summary.lint.averageMs.toFixed(1)}ms`
-  );
-  console.log(
-    `  init+lint+pack x${iterations}: min ${summary.roundTrip.minMs.toFixed(1)}ms, p50 ${summary.roundTrip.p50Ms.toFixed(1)}ms, avg ${summary.roundTrip.averageMs.toFixed(1)}ms`
-  );
+  if (!silent) {
+    console.log("CLI benchmark");
+    console.log(
+      `  lint x${iterations}: min ${summary.lint.minMs.toFixed(1)}ms, p50 ${summary.lint.p50Ms.toFixed(1)}ms, avg ${summary.lint.averageMs.toFixed(1)}ms`
+    );
+    console.log(
+      `  init+lint+pack x${iterations}: min ${summary.roundTrip.minMs.toFixed(1)}ms, p50 ${summary.roundTrip.p50Ms.toFixed(1)}ms, avg ${summary.roundTrip.averageMs.toFixed(1)}ms`
+    );
+  }
 
   return { summary, lintSamples, roundTripSamples };
 }

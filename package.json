@@ -18,8 +18,9 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "node --test test/*.test.js",
+    "benchmark": "node bench/index.js",
     "bench": "node bench/index.js",
-    "verify": "npm test && npm run bench",
+    "verify": "npm test && npm run benchmark",
     "start": "node dist/cli.js",
     "dev": "node src/cli.ts"
   },

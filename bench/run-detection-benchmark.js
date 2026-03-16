@@ -8,7 +8,8 @@ const { lintSkill } = require("../dist/lib/skill.js");
 
 const benchmarkRoot = path.resolve(__dirname, "..", "test", "fixtures", "benchmark");
 
-async function runDetectionBenchmark() {
+async function runDetectionBenchmark(options = {}) {
+  const silent = options.silent === true;
   const cases = await loadBenchmarkCases();
   const results = [];
 
@@ -30,15 +31,17 @@ async function runDetectionBenchmark() {
     recall: formatRatio(metrics.recall)
   };
 
-  console.log("Detection benchmark");
-  for (const result of results) {
+  if (!silent) {
+    console.log("Detection benchmark");
+    for (const result of results) {
+      console.log(
+        `  ${result.expected === result.predicted ? "PASS" : "FAIL"} ${result.name}: expected ${result.expected}, predicted ${result.predicted} (${result.errorCount} error(s), ${result.warningCount} warning(s))`
+      );
+    }
     console.log(
-      `  ${result.expected === result.predicted ? "PASS" : "FAIL"} ${result.name}: expected ${result.expected}, predicted ${result.predicted} (${result.errorCount} error(s), ${result.warningCount} warning(s))`
+      `  Accuracy ${metrics.correct}/${metrics.total} (${format.accuracy}), precision ${format.precision}, recall ${format.recall}`
     );
   }
-  console.log(
-    `  Accuracy ${metrics.correct}/${metrics.total} (${format.accuracy}), precision ${format.precision}, recall ${format.recall}`
-  );
 
   return { metrics, format, results };
 }
