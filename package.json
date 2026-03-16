@@ -17,6 +17,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.js",
+    "verify": "npm test",
     "start": "node dist/cli.js",
     "dev": "node src/cli.ts"
   },

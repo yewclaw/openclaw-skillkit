@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.main = main;
 const args_1 = require("./lib/args");
 const init_1 = require("./commands/init");
 const lint_1 = require("./commands/lint");
 const pack_1 = require("./commands/pack");
-async function main() {
-    const parsed = (0, args_1.parseArgs)(process.argv.slice(2));
+async function main(argv = process.argv.slice(2)) {
+    const parsed = (0, args_1.parseArgs)(argv);
     switch (parsed.command) {
         case "init":
             await handleInit(parsed);
@@ -71,7 +72,9 @@ Usage:
   openclaw-skillkit pack <dir> [--output ./dist/my-skill.skill]
 `);
 }
-main().catch((error) => {
-    console.error(`Error: ${error.message}`);
-    process.exitCode = 1;
-});
+if (require.main === module) {
+    main().catch((error) => {
+        console.error(`Error: ${error.message}`);
+        process.exitCode = 1;
+    });
+}

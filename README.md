@@ -10,11 +10,27 @@ Build OpenClaw skills without building a framework around them.
 
 The project is intentionally small, readable, and easy to fork. The goal is fast adoption, not ceremony.
 
+## Verification Pipeline
+
+One local command runs the repository's full MVP verification pipeline:
+
+```bash
+npm run verify
+```
+
+That command runs:
+
+- `npm test` for the built CLI and library test suite
+
+`npm test` uses Node's built-in test runner and exercises the checked-in CLI and library build without adding a separate test framework.
+
+If you are editing TypeScript sources and have dependencies installed, `npm run check` and `npm run build` remain available as explicit maintenance commands.
+
 ## Quickstart
 
 ```bash
 npm install
-npm run build
+npm run verify
 npx openclaw-skillkit init my-skill --resources references,scripts,assets
 npx openclaw-skillkit lint my-skill
 npx openclaw-skillkit pack my-skill
@@ -98,6 +114,29 @@ Use it to test the toolkit quickly:
 node dist/cli.js lint examples/weather-research-skill
 node dist/cli.js pack examples/weather-research-skill
 ```
+
+## Tests
+
+The test suite lives under `test/` and stays intentionally lean:
+
+- library coverage for frontmatter parsing and lint behavior
+- fixture-driven valid and invalid skills under `test/fixtures/`
+- CLI integration coverage for `init`, `lint`, and `pack`
+- archive-content checks for generated `.skill` files without extra dependencies
+
+For local iteration:
+
+```bash
+npm test
+```
+
+For the same pipeline used in CI:
+
+```bash
+npm run verify
+```
+
+GitHub Actions runs that exact command in [`.github/workflows/ci.yml`](/tmp/openclaw-skillkit-repo/.github/workflows/ci.yml).
 
 ## Project Layout
 

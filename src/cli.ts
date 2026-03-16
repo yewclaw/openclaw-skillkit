@@ -4,8 +4,8 @@ import { runInit } from "./commands/init";
 import { runLint } from "./commands/lint";
 import { runPack } from "./commands/pack";
 
-async function main(): Promise<void> {
-  const parsed = parseArgs(process.argv.slice(2));
+export async function main(argv = process.argv.slice(2)): Promise<void> {
+  const parsed = parseArgs(argv);
 
   switch (parsed.command) {
     case "init":
@@ -80,7 +80,9 @@ Usage:
 `);
 }
 
-main().catch((error) => {
-  console.error(`Error: ${(error as Error).message}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`Error: ${(error as Error).message}`);
+    process.exitCode = 1;
+  });
+}
