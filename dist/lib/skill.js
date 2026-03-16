@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.lintSkill = lintSkill;
 const path = require("node:path");
+const promises_1 = require("node:fs/promises");
 const fs_1 = require("./fs");
 const frontmatter_1 = require("./frontmatter");
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -97,6 +98,7 @@ async function lintSkill(skillDir) {
             suggestion: `Create ${reference} or update the markdown link to point at an existing bundled file.`
         }));
     }
+    await validateScriptExecutables(skillDir, issues);
     return {
         skillDir,
         issues,
@@ -204,4 +206,28 @@ function getReferencedLocalFiles(markdown) {
         references.add(target);
     }
     return [...references];
+}
+async function validateScriptExecutables(skillDir, issues) {
+    const scriptsDir = path.join(skillDir, "scripts");
+    if (!(await (0, fs_1.exists)(scriptsDir))) {
+        return;
+    }
+    const scriptFiles = await (0, fs_1.listFilesRecursive)(scriptsDir);
+    for (const file of scriptFiles) {
+        if (!looksLikeRunnableScript(file.relativePath)) {
+            continue;
+        }
+        const displayPath = path.posix.join("scripts", file.relativePath);
+        const fileStat = await (0, promises_1.stat)(file.absolutePath);
+        if ((fileStat.mode & 0o111) !== 0) {
+            continue;
+        }
+        issues.push(createIssue("warning", "non-executable-script", displayPath, `Script is not executable: ${displayPath}`, {
+            suggestion: `Run "chmod +x ${displayPath}" if the script is meant to be invoked directly.`
+        }));
+    }
+}
+function looksLikeRunnableScript(relativePath) {
+    const extension = path.extname(relativePath).toLowerCase();
+    return extension === ".sh" || extension === ".bash" || extension === ".py" || extension === ".js";
 }

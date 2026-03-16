@@ -149,6 +149,38 @@ Help the model complete a task.
   );
 });
 
+test("lintSkill warns when bundled scripts are not executable", async () => {
+  const skillDir = await makeTempDir("openclaw-script-mode-");
+  const scriptsDir = path.join(skillDir, "scripts");
+  await fs.mkdir(scriptsDir, { recursive: true });
+  await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
+name: script-mode-check
+description: Skill for catching packaged scripts that will fail when invoked directly.
+version: 1.0.0
+---
+
+# Script Mode Check
+
+## Purpose
+Catch broken script packaging before release.
+
+## Workflow
+1. Run the helper script.
+2. Validate the output.
+
+## Constraints
+- Keep the workflow reproducible.
+`);
+  await fs.writeFile(path.join(scriptsDir, "example.sh"), "#!/usr/bin/env bash\necho test\n");
+
+  const result = await lintSkill(skillDir);
+
+  assert.match(
+    result.issues.map((issue) => issue.message).join("\n"),
+    /Script is not executable: scripts\/example\.sh/
+  );
+});
+
 test("evaluation helpers summarize good-vs-bad detection metrics", () => {
   const metrics = evaluateDetectionCases([
     { name: "good-1", expected: "good", predicted: "good" },

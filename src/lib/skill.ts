@@ -1,5 +1,6 @@
 import path from "node:path";
-import { exists, readTextFile } from "./fs";
+import { stat } from "node:fs/promises";
+import { exists, listFilesRecursive, readTextFile } from "./fs";
 import { parseFrontmatter } from "./frontmatter";
 
 export interface LintIssue {
@@ -156,6 +157,8 @@ export async function lintSkill(skillDir: string): Promise<LintResult> {
       })
     );
   }
+
+  await validateScriptExecutables(skillDir, issues);
 
   return {
     skillDir,
@@ -342,4 +345,35 @@ function getReferencedLocalFiles(markdown: string): string[] {
   }
 
   return [...references];
+}
+
+async function validateScriptExecutables(skillDir: string, issues: LintIssue[]): Promise<void> {
+  const scriptsDir = path.join(skillDir, "scripts");
+  if (!(await exists(scriptsDir))) {
+    return;
+  }
+
+  const scriptFiles = await listFilesRecursive(scriptsDir);
+  for (const file of scriptFiles) {
+    if (!looksLikeRunnableScript(file.relativePath)) {
+      continue;
+    }
+
+    const displayPath = path.posix.join("scripts", file.relativePath);
+    const fileStat = await stat(file.absolutePath);
+    if ((fileStat.mode & 0o111) !== 0) {
+      continue;
+    }
+
+    issues.push(
+      createIssue("warning", "non-executable-script", displayPath, `Script is not executable: ${displayPath}`, {
+        suggestion: `Run "chmod +x ${displayPath}" if the script is meant to be invoked directly.`
+      })
+    );
+  }
+}
+
+function looksLikeRunnableScript(relativePath: string): boolean {
+  const extension = path.extname(relativePath).toLowerCase();
+  return extension === ".sh" || extension === ".bash" || extension === ".py" || extension === ".js";
 }
