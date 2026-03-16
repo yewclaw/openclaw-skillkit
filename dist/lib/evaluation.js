@@ -7,7 +7,8 @@ const DETECTION_WARNING_PATTERNS = [
     /^SKILL\.md has no frontmatter\./,
     /^Frontmatter is missing "/,
     /^Frontmatter description should be at least 20 characters/,
-    /^Frontmatter description looks like placeholder copy/
+    /^Frontmatter description looks like placeholder copy/,
+    /^SKILL\.md still contains scaffold placeholder copy/
 ];
 function classifyLintResult(result) {
     return result.issues.some((issue) => issue.level === "error" ||

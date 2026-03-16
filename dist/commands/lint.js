@@ -10,12 +10,12 @@ async function runLint(targetDir) {
     const warnings = result.issues.filter((issue) => issue.level === "warning");
     console.log(`Linting ${resolved}`);
     if (result.issues.length === 0) {
-        console.log("  OK: skill structure looks valid.");
+        console.log(`  OK: skill structure looks valid (${result.fileCount} file(s) checked).`);
         return 0;
     }
     for (const issue of result.issues) {
         console.log(`  ${issue.level.toUpperCase()}: ${issue.message}`);
     }
-    console.log(`Summary: ${errors.length} error(s), ${warnings.length} warning(s).`);
+    console.log(`Summary: ${errors.length} error(s), ${warnings.length} warning(s), ${result.fileCount} file(s) checked.`);
     return errors.length === 0 ? 0 : 1;
 }

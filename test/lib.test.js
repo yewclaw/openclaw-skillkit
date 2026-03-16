@@ -98,6 +98,16 @@ test("lintSkill warns on placeholder descriptions", async () => {
   );
 });
 
+test("lintSkill warns on scaffold placeholder body copy", async () => {
+  const skillDir = path.resolve(__dirname, "fixtures", "benchmark", "bad", "placeholder-body-skill");
+  const result = await lintSkill(skillDir);
+
+  assert.match(
+    result.issues.map((issue) => issue.message).join("\n"),
+    /SKILL\.md still contains scaffold placeholder copy/
+  );
+});
+
 test("evaluation helpers summarize good-vs-bad detection metrics", () => {
   const metrics = evaluateDetectionCases([
     { name: "good-1", expected: "good", predicted: "good" },
@@ -129,8 +139,16 @@ test("classifyLintResult marks lint errors as bad skills", async () => {
     "bad",
     "placeholder-description-skill"
   );
+  const placeholderBodySkillDir = path.resolve(
+    __dirname,
+    "fixtures",
+    "benchmark",
+    "bad",
+    "placeholder-body-skill"
+  );
 
   assert.equal(classifyLintResult(await lintSkill(validSkillDir)), "good");
   assert.equal(classifyLintResult(await lintSkill(invalidSkillDir)), "bad");
   assert.equal(classifyLintResult(await lintSkill(placeholderSkillDir)), "bad");
+  assert.equal(classifyLintResult(await lintSkill(placeholderBodySkillDir)), "bad");
 });

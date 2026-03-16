@@ -88,7 +88,7 @@ test("cli lint succeeds for a valid fixture", async () => {
   const result = await runCli(["lint", skillDir]);
 
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /Summary: 0 error\(s\), 1 warning\(s\)\./);
+  assert.match(result.stdout, /Summary: 0 error\(s\), 1 warning\(s\), 1 file\(s\) checked\./);
 });
 
 test("cli lint fails for an invalid fixture", async () => {
@@ -133,6 +133,19 @@ test("cli pack creates a .skill archive for a valid fixture", async () => {
   ]);
 });
 
+test("cli pack surfaces warnings before creating the archive", async () => {
+  const tempDir = await makeTempDir("openclaw-pack-warning-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+
+  const result = await runCli(["pack", skillDir, "--output", outputPath]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Packing with 1 warning\(s\):/);
+  assert.match(result.stdout, /Optional directory not found: examples\//);
+});
+
 test("cli pack fails when lint errors exist", async () => {
   const tempDir = await makeTempDir("openclaw-pack-invalid-");
   const skillDir = path.join(tempDir, "skill");
@@ -142,4 +155,19 @@ test("cli pack fails when lint errors exist", async () => {
 
   assert.equal(result.code, 1);
   assert.match(result.stderr, /Cannot pack .* because lint found 2 error\(s\)\./);
+});
+
+test("cli help supports command-specific output", async () => {
+  const result = await runCli(["help", "pack"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /openclaw-skillkit pack/);
+  assert.match(result.stdout, /Create a \.skill archive after lint passes\./);
+});
+
+test("cli rejects unknown flags with a clear error", async () => {
+  const result = await runCli(["lint", "--output", "./artifact.skill"]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /Unknown flag\(s\): --output\./);
 });

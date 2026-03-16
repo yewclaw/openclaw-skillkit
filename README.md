@@ -22,6 +22,16 @@ npx openclaw-skillkit lint my-skill
 npx openclaw-skillkit pack my-skill
 ```
 
+Fast evaluation loop:
+
+```bash
+npx openclaw-skillkit help pack
+npx openclaw-skillkit init demo-skill --resources references,scripts
+$EDITOR demo-skill/SKILL.md
+npx openclaw-skillkit lint demo-skill
+npx openclaw-skillkit pack demo-skill --output ./artifacts/demo-skill.skill
+```
+
 If you want to use the checked-in build directly:
 
 ```bash
@@ -74,6 +84,7 @@ Validate a skill directory with practical checks:
 - `name`, `description`, and `version` are checked for useful metadata
 - skill names must be lowercase slug-style identifiers
 - placeholder descriptions are flagged before they hurt discovery
+- untouched scaffold body copy is flagged before a generated skill ships as-is
 - broken local markdown references in `SKILL.md` are reported as errors
 - missing top-level and section headings are surfaced
 
@@ -87,12 +98,14 @@ Example output:
 Linting /tmp/openclaw-skillkit-repo/examples/weather-research-skill
   WARNING: Optional directory not found: assets/
   WARNING: Optional directory not found: examples/
-Summary: 0 error(s), 2 warning(s).
+Summary: 0 error(s), 2 warning(s), 1 file(s) checked.
 ```
 
 ### `pack`
 
 Package a skill directory into a `.skill` archive. `pack` runs lint first and refuses to build an archive if lint errors exist.
+
+Warnings remain visible during `pack`, so reviewers can still spot weak metadata or incomplete structure before sharing the archive.
 
 ```bash
 openclaw-skillkit pack skills/customer-support
@@ -130,6 +143,16 @@ npm run build
 ```
 
 GitHub Actions runs the same `npm run verify` command in [`.github/workflows/ci.yml`](/tmp/openclaw-skillkit-repo/.github/workflows/ci.yml).
+
+## CLI Help
+
+The CLI now supports command-aware help for faster first-use discovery:
+
+```bash
+openclaw-skillkit help
+openclaw-skillkit help init
+openclaw-skillkit pack --help
+```
 
 ## Example Skill
 

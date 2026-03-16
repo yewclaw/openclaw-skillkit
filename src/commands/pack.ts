@@ -7,6 +7,7 @@ export async function runPack(targetDir: string, outputPath?: string): Promise<v
   const resolvedDir = path.resolve(targetDir);
   const lintResult = await lintSkill(resolvedDir);
   const errors = lintResult.issues.filter((issue) => issue.level === "error");
+  const warnings = lintResult.issues.filter((issue) => issue.level === "warning");
 
   if (errors.length > 0) {
     throw new Error(`Cannot pack ${resolvedDir} because lint found ${errors.length} error(s).`);
@@ -18,6 +19,13 @@ export async function runPack(targetDir: string, outputPath?: string): Promise<v
 
   if (await exists(destination)) {
     throw new Error(`Output already exists: ${destination}`);
+  }
+
+  if (warnings.length > 0) {
+    console.log(`Packing with ${warnings.length} warning(s):`);
+    for (const warning of warnings) {
+      console.log(`  WARNING: ${warning.message}`);
+    }
   }
 
   const fileCount = await createSkillArchive(resolvedDir, destination);

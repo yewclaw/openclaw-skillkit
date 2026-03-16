@@ -10,6 +10,12 @@ const PLACEHOLDER_DESCRIPTION_PATTERNS = [
     /\b(todo|tbd|placeholder|fill in|write a description)\b/i,
     /^openclaw skill for\b/i
 ];
+const PLACEHOLDER_BODY_PATTERNS = [
+    /Explain what this skill helps the model do\./i,
+    /Add the trigger conditions\./i,
+    /Describe the expected workflow\./i,
+    /List important guardrails\./i
+];
 async function lintSkill(skillDir) {
     const issues = [];
     const skillFile = path.join(skillDir, "SKILL.md");
@@ -65,6 +71,12 @@ async function lintSkill(skillDir) {
         issues.push({
             level: "warning",
             message: "SKILL.md should include at least one section heading."
+        });
+    }
+    if (PLACEHOLDER_BODY_PATTERNS.some((pattern) => pattern.test(frontmatterBody))) {
+        issues.push({
+            level: "warning",
+            message: "SKILL.md still contains scaffold placeholder copy. Replace it with real instructions before shipping."
         });
     }
     for (const reference of getReferencedMarkdownFiles(frontmatterBody)) {
