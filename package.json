@@ -1,0 +1,36 @@
+{
+  "name": "openclaw-skillkit",
+  "version": "0.1.0",
+  "description": "Build, lint, and pack OpenClaw skills with a lean Node.js CLI.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "openclaw-skillkit": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "examples",
+    "README.md",
+    "tsconfig.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/cli.js",
+    "dev": "node src/cli.ts"
+  },
+  "keywords": [
+    "openclaw",
+    "skills",
+    "cli",
+    "toolkit"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "typescript": "^5.8.2"
+  }
+}
