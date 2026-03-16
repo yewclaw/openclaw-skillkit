@@ -47,6 +47,8 @@ If you want to use the checked-in build directly:
 
 ```bash
 node dist/cli.js lint examples/weather-research-skill
+node dist/cli.js lint examples/customer-support-triage-skill
+node dist/cli.js lint examples/release-notes-skill
 node dist/cli.js pack examples/weather-research-skill
 node bench/index.js --iterations 3
 ```
@@ -98,6 +100,7 @@ skills/customer-support/
 - missing headings that make the skill hard to review
 - broken local file references
 - stable issue codes and fix suggestions for each finding
+- focus-area summaries and next-step guidance for authors and CI consumers
 - JSON output for CI, editor extensions, and custom tooling
 
 ```bash
@@ -118,6 +121,11 @@ Example actionable failure output:
 Linting /tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill
   ERROR [invalid-frontmatter-version] SKILL.md: Frontmatter version must look like semver. Received "version1".
     Fix: Use a semver-style version such as "0.1.0" or "1.2.3-beta.1".
+Summary: 2 error(s), 2 warning(s), 1 file(s) checked.
+Action plan:
+  1. Fix blocking metadata issues first. Update the SKILL.md frontmatter so name, description, and version clearly identify the skill.
+  2. Then review structure warnings. Add the standard sections and make the workflow easy to follow as numbered steps.
+  3. Re-run: openclaw-skillkit lint /tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill
 ```
 
 Example JSON output:
@@ -131,10 +139,25 @@ Example JSON output:
     "errors": 2,
     "warnings": 2
   },
+  "focusAreas": [
+    {
+      "category": "frontmatter",
+      "label": "Metadata",
+      "errors": 2,
+      "warnings": 1,
+      "suggestion": "Update the SKILL.md frontmatter so name, description, and version clearly identify the skill."
+    }
+  ],
+  "nextSteps": [
+    "Fix blocking metadata issues first. Update the SKILL.md frontmatter so name, description, and version clearly identify the skill.",
+    "Then review structure warnings. Add the standard sections and make the workflow easy to follow as numbered steps.",
+    "Re-run: openclaw-skillkit lint /tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill"
+  ],
   "issues": [
     {
       "level": "error",
       "code": "invalid-frontmatter-version",
+      "category": "frontmatter",
       "file": "SKILL.md",
       "message": "Frontmatter version must look like semver. Received \"version1\".",
       "suggestion": "Use a semver-style version such as \"0.1.0\" or \"1.2.3-beta.1\"."
@@ -176,7 +199,11 @@ Typical flow:
 3. `lint` catches structural and quality issues before review.
 4. `pack` creates a portable archive once the skill clears validation.
 
-A working example lives in [`examples/weather-research-skill/`](examples/weather-research-skill/).
+Working examples live in:
+
+- [`examples/weather-research-skill/`](examples/weather-research-skill/) for grounded trip-planning research
+- [`examples/customer-support-triage-skill/`](examples/customer-support-triage-skill/) for support queue routing and escalation
+- [`examples/release-notes-skill/`](examples/release-notes-skill/) for turning engineering change notes into customer-facing launches
 
 ## Quality Pipeline
 
@@ -184,7 +211,7 @@ This repo is opinionated about trust:
 
 - `pack` is gated by lint, so broken skills do not get archived by accident
 - fixture-driven tests cover parsing, linting, CLI behavior, and archive contents
-- `npm run verify` runs the test suite plus the benchmark suite
+- `npm run verify` runs tests and benchmarks, and also typechecks plus rebuilds `dist/` when the local TypeScript compiler is available
 - GitHub Actions runs the same `npm run verify` command on pushes and pull requests
 
 Run the full local pipeline:

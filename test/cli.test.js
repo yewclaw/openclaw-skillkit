@@ -131,7 +131,9 @@ serialTest("cli lint fails for an invalid fixture", async () => {
   assert.match(result.stdout, /ERROR \[invalid-frontmatter-version\] SKILL\.md: Frontmatter version must look like semver/);
   assert.match(result.stdout, /Fix: Use a semver-style version such as "0\.1\.0" or "1\.2\.3-beta\.1"\./);
   assert.match(result.stdout, /ERROR \[short-frontmatter-name\] SKILL\.md: Frontmatter name must be at least 3 characters/);
-  assert.match(result.stdout, /Next: fix the errors above before running pack\./);
+  assert.match(result.stdout, /Action plan:/);
+  assert.match(result.stdout, /Fix blocking metadata issues first\./);
+  assert.match(result.stdout, /Re-run: openclaw-skillkit lint /);
 });
 
 serialTest("cli lint reports broken markdown references", async () => {
@@ -160,10 +162,29 @@ serialTest("cli lint supports json output for CI and editor tooling", async () =
     warnings: 2,
     total: 4
   });
+  assert.deepEqual(payload.focusAreas, [
+    {
+      category: "frontmatter",
+      label: "Metadata",
+      errors: 2,
+      warnings: 0,
+      suggestion: "Update the SKILL.md frontmatter so name, description, and version clearly identify the skill."
+    },
+    {
+      category: "structure",
+      label: "Structure",
+      errors: 0,
+      warnings: 2,
+      suggestion: "Add the standard sections and make the workflow easy to follow as numbered steps."
+    }
+  ]);
+  assert.match(payload.nextSteps[0], /Fix blocking metadata issues first\./);
+  assert.match(payload.nextSteps[payload.nextSteps.length - 1], /Re-run: openclaw-skillkit lint /);
   assert.deepEqual(payload.issues.slice(0, 2).map((issue) => issue.code), [
     "invalid-frontmatter-version",
     "short-frontmatter-name"
   ]);
+  assert.equal(payload.issues[0].category, "frontmatter");
   assert.match(payload.issues[0].suggestion, /semver-style version/);
 });
 

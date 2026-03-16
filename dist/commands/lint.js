@@ -7,11 +7,14 @@ async function runLint(targetDir, options) {
     const resolved = path.resolve(targetDir);
     const result = await (0, skill_1.lintSkill)(resolved);
     const summary = summarize(result);
+    const actionPlan = buildActionPlan(result, resolved);
     if (options.format === "json") {
         console.log(JSON.stringify({
             skillDir: result.skillDir,
             fileCount: result.fileCount,
             summary,
+            focusAreas: summarizeFocusAreas(result),
+            nextSteps: actionPlan,
             issues: result.issues
         }, null, 2));
         return summary.errors === 0 ? 0 : 1;
@@ -29,11 +32,11 @@ async function runLint(targetDir, options) {
         }
     }
     console.log(`Summary: ${summary.errors} error(s), ${summary.warnings} warning(s), ${result.fileCount} file(s) checked.`);
-    if (summary.errors > 0) {
-        console.log("Next: fix the errors above before running pack.");
-    }
-    else if (summary.warnings > 0) {
-        console.log(`Next: review the warnings above, then run "openclaw-skillkit pack ${resolved}" when ready.`);
+    if (actionPlan.length > 0) {
+        console.log("Action plan:");
+        for (const [index, step] of actionPlan.entries()) {
+            console.log(`  ${index + 1}. ${step}`);
+        }
     }
     return summary.errors === 0 ? 0 : 1;
 }
@@ -46,3 +49,72 @@ function summarize(result) {
         warnings
     };
 }
+function summarizeFocusAreas(result) {
+    const grouped = new Map();
+    for (const issue of result.issues) {
+        const current = grouped.get(issue.category) ?? { errors: 0, warnings: 0 };
+        current[issue.level === "error" ? "errors" : "warnings"] += 1;
+        grouped.set(issue.category, current);
+    }
+    return [...grouped.entries()]
+        .sort((left, right) => {
+        const leftCounts = left[1];
+        const rightCounts = right[1];
+        return (rightCounts.errors - leftCounts.errors ||
+            rightCounts.warnings - leftCounts.warnings ||
+            left[0].localeCompare(right[0]));
+    })
+        .map(([category, counts]) => ({
+        category,
+        label: CATEGORY_GUIDANCE[category].label,
+        errors: counts.errors,
+        warnings: counts.warnings,
+        suggestion: CATEGORY_GUIDANCE[category].suggestion
+    }));
+}
+function buildActionPlan(result, resolvedDir) {
+    const focusAreas = summarizeFocusAreas(result);
+    if (focusAreas.length === 0) {
+        return [`Pack when ready: openclaw-skillkit pack ${resolvedDir}`];
+    }
+    const steps = [];
+    const blockingArea = focusAreas.find((area) => area.errors > 0);
+    if (blockingArea) {
+        steps.push(`Fix blocking ${blockingArea.label.toLowerCase()} issues first. ${blockingArea.suggestion}`);
+    }
+    const warningArea = focusAreas.find((area) => area.warnings > 0 && area.category !== blockingArea?.category);
+    if (warningArea) {
+        steps.push(`Then review ${warningArea.label.toLowerCase()} warnings. ${warningArea.suggestion}`);
+    }
+    steps.push(`Re-run: openclaw-skillkit lint ${resolvedDir}`);
+    if (!blockingArea) {
+        steps.push(`Pack when ready: openclaw-skillkit pack ${resolvedDir}`);
+    }
+    return steps;
+}
+const CATEGORY_GUIDANCE = {
+    filesystem: {
+        label: "Filesystem",
+        suggestion: "Make sure the skill directory exists and contains a root SKILL.md before packaging."
+    },
+    frontmatter: {
+        label: "Metadata",
+        suggestion: "Update the SKILL.md frontmatter so name, description, and version clearly identify the skill."
+    },
+    structure: {
+        label: "Structure",
+        suggestion: "Add the standard sections and make the workflow easy to follow as numbered steps."
+    },
+    content: {
+        label: "Content",
+        suggestion: "Replace scaffold copy with concrete instructions, outputs, and guardrails."
+    },
+    references: {
+        label: "References",
+        suggestion: "Repair or bundle every local markdown link so packaged skills stay self-contained."
+    },
+    scripts: {
+        label: "Scripts",
+        suggestion: "Mark bundled helper scripts executable when authors are expected to run them directly."
+    }
+};

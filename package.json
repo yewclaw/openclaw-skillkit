@@ -20,7 +20,7 @@
     "test": "node --test test/*.test.js",
     "benchmark": "node bench/index.js",
     "bench": "node bench/index.js",
-    "verify": "npm test && npm run benchmark",
+    "verify": "node scripts/verify.js",
     "start": "node dist/cli.js",
     "dev": "node src/cli.ts"
   },

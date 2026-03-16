@@ -53,6 +53,19 @@ test("lintSkill accepts a valid fixture without optional-directory noise", async
   assert.deepEqual(result.issues, []);
 });
 
+test("lintSkill accepts the bundled example skills", async () => {
+  const exampleDirs = [
+    path.resolve(__dirname, "..", "examples", "weather-research-skill"),
+    path.resolve(__dirname, "..", "examples", "customer-support-triage-skill"),
+    path.resolve(__dirname, "..", "examples", "release-notes-skill")
+  ];
+
+  for (const skillDir of exampleDirs) {
+    const result = await lintSkill(skillDir);
+    assert.deepEqual(result.issues, [], skillDir);
+  }
+});
+
 test("lintSkill reports missing skill file", async () => {
   const skillDir = path.resolve(__dirname, "fixtures", "invalid", "missing-skill-file");
   const result = await lintSkill(skillDir);
@@ -61,6 +74,7 @@ test("lintSkill reports missing skill file", async () => {
   assert.deepEqual(result.issues[0], {
     level: "error",
     code: "missing-skill-file",
+    category: "filesystem",
     file: ".",
     message: "Missing SKILL.md at the skill root.",
     suggestion: 'Run "openclaw-skillkit init <dir>" or add SKILL.md before packaging this skill.'
@@ -115,6 +129,7 @@ test("lintSkill returns machine-readable issue metadata and suggestions", async 
   assert.deepEqual(issue, {
     level: "error",
     code: "missing-local-reference",
+    category: "references",
     file: "SKILL.md",
     message: "Referenced local file not found: references/missing.md",
     suggestion: "Create references/missing.md or update the markdown link to point at an existing bundled file."
