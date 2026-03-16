@@ -1,19 +1,30 @@
 ---
 name: weather-research-skill
-description: Gather recent weather details and summarize impact for trip planning.
+description: Gather current weather signals and turn them into practical trip-planning advice.
 version: 0.1.0
 ---
 
 # Weather Research Skill
 
 ## Purpose
-Collect current weather conditions and a short forecast for a destination.
+Collect current conditions, a short forecast, and packing implications for a destination.
+
+## Use When
+- The user is planning a trip and needs actionable weather context instead of raw numbers.
+- The answer should cite grounded source notes or use the bundled helper flow.
 
 ## Workflow
 1. Confirm the destination and travel dates.
-2. Pull the latest weather signal from a reliable source.
-3. Summarize practical packing advice.
+2. Check the local notes in [Trip Brief](references/trip-brief.md) for known packing assumptions and output expectations.
+3. Use [the helper script](scripts/example.sh) or an equivalent repeatable lookup flow to fetch current conditions and a short forecast.
+4. Summarize likely weather impacts, confidence, and practical packing advice.
+
+## Output
+- Current conditions in one short sentence.
+- Forecast highlights for the requested dates.
+- A compact packing or planning recommendation list.
 
 ## Constraints
 - Prefer recent and attributable weather data.
-- Keep the response concise.
+- Call out uncertainty if the travel dates are outside the forecast window.
+- Keep the response concise and practical.

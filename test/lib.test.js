@@ -2,8 +2,10 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
 const path = require("node:path");
 
+const { makeTempDir } = require("./helpers/fixture.js");
 const { parseFrontmatter } = require("../dist/lib/frontmatter.js");
 const { lintSkill } = require("../dist/lib/skill.js");
 const {
@@ -55,12 +57,14 @@ test("lintSkill reports missing skill file", async () => {
   const skillDir = path.resolve(__dirname, "fixtures", "invalid", "missing-skill-file");
   const result = await lintSkill(skillDir);
 
-  assert.deepEqual(result.issues, [
-    {
-      level: "error",
-      message: "Missing SKILL.md at the skill root."
-    }
-  ]);
+  assert.equal(result.issues.length, 1);
+  assert.deepEqual(result.issues[0], {
+    level: "error",
+    code: "missing-skill-file",
+    file: ".",
+    message: "Missing SKILL.md at the skill root.",
+    suggestion: 'Run "openclaw-skillkit init <dir>" or add SKILL.md before packaging this skill.'
+  });
 });
 
 test("lintSkill rejects invalid skill names", async () => {
@@ -79,7 +83,7 @@ test("lintSkill detects missing local markdown references", async () => {
 
   assert.match(
     result.issues.map((issue) => issue.message).join("\n"),
-    /Referenced markdown file not found: references\/missing\.md/
+    /Referenced local file not found: references\/missing\.md/
   );
 });
 
@@ -100,6 +104,48 @@ test("lintSkill warns on scaffold placeholder body copy", async () => {
   assert.match(
     result.issues.map((issue) => issue.message).join("\n"),
     /SKILL\.md still contains scaffold placeholder copy/
+  );
+});
+
+test("lintSkill returns machine-readable issue metadata and suggestions", async () => {
+  const skillDir = path.resolve(__dirname, "fixtures", "benchmark", "bad", "broken-reference-skill");
+  const result = await lintSkill(skillDir);
+  const issue = result.issues.find((entry) => entry.code === "missing-local-reference");
+
+  assert.deepEqual(issue, {
+    level: "error",
+    code: "missing-local-reference",
+    file: "SKILL.md",
+    message: "Referenced local file not found: references/missing.md",
+    suggestion: "Create references/missing.md or update the markdown link to point at an existing bundled file."
+  });
+});
+
+test("lintSkill warns when the workflow section is not expressed as numbered steps", async () => {
+  const skillDir = await makeTempDir("openclaw-workflow-warning-");
+  await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
+name: workflow-gap
+description: Skill for catching weak workflow guidance before packaging.
+version: 1.0.0
+---
+
+# Workflow Gap
+
+## Purpose
+Help the model complete a task.
+
+## Workflow
+- Do the thing.
+
+## Constraints
+- Stay grounded.
+`);
+
+  const result = await lintSkill(skillDir);
+
+  assert.match(
+    result.issues.map((issue) => issue.message).join("\n"),
+    /The "## Workflow" section should include numbered steps\./
   );
 });
 

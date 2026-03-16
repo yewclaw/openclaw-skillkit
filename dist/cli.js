@@ -2,10 +2,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
+const path = require("node:path");
 const args_1 = require("./lib/args");
 const init_1 = require("./commands/init");
 const lint_1 = require("./commands/lint");
 const pack_1 = require("./commands/pack");
+const templates_1 = require("./lib/templates");
 async function main(argv = process.argv.slice(2)) {
     const parsed = (0, args_1.parseArgs)(argv);
     const wantsHelp = parsed.command === "help" || (0, args_1.getFlag)(parsed, "help") === true;
@@ -31,7 +33,7 @@ async function main(argv = process.argv.slice(2)) {
     }
 }
 async function handleInit(parsed) {
-    assertNoUnexpectedFlags(parsed, ["name", "description", "resources", "force"]);
+    assertNoUnexpectedFlags(parsed, ["name", "description", "template", "resources", "force"]);
     assertArgumentCount(parsed, 1, "init expects exactly 1 target directory.");
     const targetDir = parsed.positionals[0];
     if (!targetDir) {
@@ -44,31 +46,40 @@ async function handleInit(parsed) {
             .map((item) => item.trim())
             .filter(Boolean)
         : [];
-    const nameFlag = (0, args_1.getFlag)(parsed, "name");
-    const descriptionFlag = (0, args_1.getFlag)(parsed, "description");
+    const template = parseTemplateMode((0, args_1.getFlag)(parsed, "template"));
     await (0, init_1.runInit)({
         targetDir,
-        name: typeof nameFlag === "string" ? String(nameFlag) : undefined,
-        description: typeof descriptionFlag === "string" ? String(descriptionFlag) : undefined,
+        name: typeof (0, args_1.getFlag)(parsed, "name") === "string" ? String((0, args_1.getFlag)(parsed, "name")) : undefined,
+        description: typeof (0, args_1.getFlag)(parsed, "description") === "string" ? String((0, args_1.getFlag)(parsed, "description")) : undefined,
+        template,
         resources,
         force: (0, args_1.getFlag)(parsed, "force") === true
     });
-    console.log(`Initialized skill at ${targetDir}`);
-    console.log(`Next: edit ${targetDir}/SKILL.md, then run "openclaw-skillkit lint ${targetDir}"`);
+    const resolvedTargetDir = path.resolve(targetDir);
+    const createdEntries = ["SKILL.md"];
+    for (const resource of templateResourcesForSummary(template, resources)) {
+        createdEntries.push(`${resource}/`);
+    }
+    console.log(`Initialized skill at ${resolvedTargetDir}`);
+    console.log(`Template: ${template}`);
+    console.log(`Created: ${createdEntries.join(", ")}`);
+    console.log(`Next: edit ${resolvedTargetDir}/SKILL.md`);
+    console.log(`Then: openclaw-skillkit lint ${resolvedTargetDir}`);
+    console.log(`Ship: openclaw-skillkit pack ${resolvedTargetDir}`);
 }
 async function handleLint(parsed) {
-    assertNoUnexpectedFlags(parsed, []);
+    assertNoUnexpectedFlags(parsed, ["format", "json"]);
     assertArgumentCount(parsed, 1, "lint accepts at most 1 target directory.");
     const targetDir = parsed.positionals[0] ?? ".";
-    const exitCode = await (0, lint_1.runLint)(targetDir);
+    const format = parseLintFormat(parsed);
+    const exitCode = await (0, lint_1.runLint)(targetDir, { format });
     process.exitCode = exitCode;
 }
 async function handlePack(parsed) {
     assertNoUnexpectedFlags(parsed, ["output"]);
     assertArgumentCount(parsed, 1, "pack expects exactly 1 target directory.");
     const targetDir = parsed.positionals[0] ?? ".";
-    const outputFlag = (0, args_1.getFlag)(parsed, "output");
-    const output = typeof outputFlag === "string" ? String(outputFlag) : undefined;
+    const output = typeof (0, args_1.getFlag)(parsed, "output") === "string" ? String((0, args_1.getFlag)(parsed, "output")) : undefined;
     await (0, pack_1.runPack)(targetDir, output);
 }
 function assertNoUnexpectedFlags(parsed, allowed) {
@@ -90,10 +101,11 @@ function printHelp(command = "overview") {
 Scaffold a ready-to-edit skill directory.
 
 Usage:
-  openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--resources references,scripts,assets] [--force]
+  openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
 
 Examples:
-  openclaw-skillkit init skills/customer-support --resources references,scripts
+  openclaw-skillkit init skills/customer-support --template scripts
+  openclaw-skillkit init skills/customer-support --template full
   openclaw-skillkit init ./skill --name customer-support --description "Skill for triage workflows"
 `);
         return;
@@ -104,10 +116,11 @@ Examples:
 Validate a skill directory for packaging and review.
 
 Usage:
-  openclaw-skillkit lint [dir]
+  openclaw-skillkit lint [dir] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit lint
+  openclaw-skillkit lint --json
   openclaw-skillkit lint examples/weather-research-skill
 `);
         return;
@@ -123,6 +136,7 @@ Usage:
 Examples:
   openclaw-skillkit pack
   openclaw-skillkit pack skills/customer-support
+  openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support
   openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
 `);
         return;
@@ -132,8 +146,8 @@ Examples:
 Build, lint, and pack OpenClaw skills.
 
 Usage:
-  openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--resources references,scripts,assets] [--force]
-  openclaw-skillkit lint [dir]
+  openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
+  openclaw-skillkit lint [dir] [--json|--format text|json]
   openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill]
 
 Help:
@@ -147,4 +161,39 @@ if (require.main === module) {
         console.error(`Error: ${error.message}`);
         process.exitCode = 1;
     });
+}
+function parseTemplateMode(value) {
+    if (value === undefined) {
+        return "minimal";
+    }
+    if (typeof value !== "string") {
+        throw new Error(`--template expects one of: ${Object.keys(templates_1.TEMPLATE_MODES).join(", ")}`);
+    }
+    if (value in templates_1.TEMPLATE_MODES) {
+        return value;
+    }
+    throw new Error(`Unknown template mode "${value}". Use one of: ${Object.keys(templates_1.TEMPLATE_MODES).join(", ")}.`);
+}
+function parseLintFormat(parsed) {
+    const jsonFlag = (0, args_1.getFlag)(parsed, "json");
+    const formatFlag = (0, args_1.getFlag)(parsed, "format");
+    if (jsonFlag === true && formatFlag !== undefined) {
+        throw new Error('Use either --json or --format, not both.');
+    }
+    if (jsonFlag === true) {
+        return "json";
+    }
+    if (formatFlag === undefined) {
+        return "text";
+    }
+    if (typeof formatFlag !== "string") {
+        throw new Error('`--format` expects "text" or "json".');
+    }
+    if (formatFlag === "text" || formatFlag === "json") {
+        return formatFlag;
+    }
+    throw new Error(`Unknown lint format "${formatFlag}". Use "text" or "json".`);
+}
+function templateResourcesForSummary(template, resources) {
+    return [...new Set([...templates_1.TEMPLATE_MODES[template], ...resources])];
 }

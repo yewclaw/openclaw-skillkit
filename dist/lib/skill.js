@@ -15,29 +15,40 @@ const PLACEHOLDER_BODY_PATTERNS = [
     /Describe the expected workflow\./i,
     /List important guardrails\./i
 ];
+const RECOMMENDED_SECTION_HEADINGS = [
+    {
+        heading: "Purpose",
+        suggestion: 'Add a "## Purpose" section that explains the outcome this skill is meant to produce.'
+    },
+    {
+        heading: "Workflow",
+        suggestion: 'Add a "## Workflow" section with the repeatable steps the model should follow.'
+    },
+    {
+        heading: "Constraints",
+        suggestion: 'Add a "## Constraints" section with non-negotiable guardrails, checks, or limits.'
+    }
+];
 async function lintSkill(skillDir) {
     const issues = [];
     const skillFile = path.join(skillDir, "SKILL.md");
     if (!(await (0, fs_1.exists)(skillDir))) {
-        issues.push({
-            level: "error",
-            message: `Directory does not exist: ${skillDir}`
-        });
+        issues.push(createIssue("error", "missing-directory", ".", `Directory does not exist: ${skillDir}`, {
+            suggestion: "Check the path passed to lint or create the skill directory before validating."
+        }));
         return { skillDir, issues, fileCount: 0 };
     }
     if (!(await (0, fs_1.exists)(skillFile))) {
-        issues.push({
-            level: "error",
-            message: "Missing SKILL.md at the skill root."
-        });
+        issues.push(createIssue("error", "missing-skill-file", ".", "Missing SKILL.md at the skill root.", {
+            suggestion: 'Run "openclaw-skillkit init <dir>" or add SKILL.md before packaging this skill.'
+        }));
         return { skillDir, issues, fileCount: 0 };
     }
     const markdown = await (0, fs_1.readTextFile)(skillFile);
     if (!markdown.trim()) {
-        issues.push({
-            level: "error",
-            message: "SKILL.md is empty."
-        });
+        issues.push(createIssue("error", "empty-skill-file", "SKILL.md", "SKILL.md is empty.", {
+            suggestion: "Add frontmatter plus concrete instructions so the skill can be reviewed and packaged."
+        }));
         return { skillDir, issues, fileCount: 1 };
     }
     let frontmatterBody = markdown;
@@ -45,48 +56,46 @@ async function lintSkill(skillDir) {
         const parsed = (0, frontmatter_1.parseFrontmatter)(markdown);
         frontmatterBody = parsed.body;
         if (!parsed.hasFrontmatter) {
-            issues.push({
-                level: "warning",
-                message: "SKILL.md has no frontmatter. Add name, description, and version for better tooling."
-            });
+            issues.push(createIssue("warning", "missing-frontmatter", "SKILL.md", "SKILL.md has no frontmatter. Add name, description, and version for better tooling.", {
+                suggestion: 'Start SKILL.md with "---" and add name, description, and version fields.'
+            }));
         }
         else {
             validateFrontmatter(parsed.attributes, issues);
         }
     }
     catch (error) {
-        issues.push({
-            level: "error",
-            message: `Frontmatter error: ${error.message}`
-        });
+        issues.push(createIssue("error", "frontmatter-parse-error", "SKILL.md", `Frontmatter error: ${error.message}`, {
+            suggestion: 'Use simple "key: value" lines between the opening and closing "---" markers.'
+        }));
     }
     if (!/^#\s+.+/m.test(frontmatterBody)) {
-        issues.push({
-            level: "error",
-            message: "SKILL.md should contain a top-level heading."
-        });
+        issues.push(createIssue("error", "missing-title-heading", "SKILL.md", "SKILL.md should contain a top-level heading.", {
+            suggestion: 'Add a single "# Skill Title" heading near the top of the document body.'
+        }));
     }
     if (!/##\s+.+/m.test(frontmatterBody)) {
-        issues.push({
-            level: "warning",
-            message: "SKILL.md should include at least one section heading."
-        });
+        issues.push(createIssue("warning", "missing-section-heading", "SKILL.md", "SKILL.md should include at least one section heading.", {
+            suggestion: 'Add sections such as "Purpose", "Workflow", or "Constraints" so the skill is easier to review.'
+        }));
     }
     if (PLACEHOLDER_BODY_PATTERNS.some((pattern) => pattern.test(frontmatterBody))) {
-        issues.push({
-            level: "warning",
-            message: "SKILL.md still contains scaffold placeholder copy. Replace it with real instructions before shipping."
-        });
+        issues.push(createIssue("warning", "placeholder-body", "SKILL.md", "SKILL.md still contains scaffold placeholder copy. Replace it with real instructions before shipping.", {
+            suggestion: "Rewrite the scaffold sections with the actual trigger conditions, workflow steps, and guardrails."
+        }));
     }
-    for (const reference of getReferencedMarkdownFiles(frontmatterBody)) {
+    const sections = extractSections(frontmatterBody);
+    if (sections.size > 0) {
+        validateRecommendedSections(sections, issues);
+    }
+    for (const reference of getReferencedLocalFiles(frontmatterBody)) {
         const referencePath = path.resolve(skillDir, reference);
         if (await (0, fs_1.exists)(referencePath)) {
             continue;
         }
-        issues.push({
-            level: "error",
-            message: `Referenced markdown file not found: ${reference}`
-        });
+        issues.push(createIssue("error", "missing-local-reference", "SKILL.md", `Referenced local file not found: ${reference}`, {
+            suggestion: `Create ${reference} or update the markdown link to point at an existing bundled file.`
+        }));
     }
     return {
         skillDir,
@@ -97,48 +106,82 @@ async function lintSkill(skillDir) {
 function validateFrontmatter(attributes, issues) {
     for (const field of ["name", "description", "version"]) {
         if (!attributes[field]) {
-            issues.push({
-                level: "warning",
-                message: `Frontmatter is missing "${field}".`
-            });
+            issues.push(createIssue("warning", `missing-frontmatter-${field}`, "SKILL.md", `Frontmatter is missing "${field}".`, {
+                suggestion: `Add a ${field}: ... entry to the frontmatter block.`
+            }));
         }
     }
     if (attributes.version && !/^\d+\.\d+\.\d+([-.][0-9A-Za-z.]+)?$/.test(attributes.version)) {
-        issues.push({
-            level: "error",
-            message: `Frontmatter version must look like semver. Received "${attributes.version}".`
-        });
+        issues.push(createIssue("error", "invalid-frontmatter-version", "SKILL.md", `Frontmatter version must look like semver. Received "${attributes.version}".`, {
+            suggestion: 'Use a semver-style version such as "0.1.0" or "1.2.3-beta.1".'
+        }));
     }
     if (attributes.name) {
         if (attributes.name.length < 3) {
-            issues.push({
-                level: "error",
-                message: "Frontmatter name must be at least 3 characters."
-            });
+            issues.push(createIssue("error", "short-frontmatter-name", "SKILL.md", "Frontmatter name must be at least 3 characters.", {
+                suggestion: 'Use a stable slug such as "customer-support" instead of an abbreviated label.'
+            }));
         }
         if (!SKILL_NAME_PATTERN.test(attributes.name)) {
-            issues.push({
-                level: "error",
-                message: `Frontmatter name must use lowercase letters, numbers, and single hyphens. Received "${attributes.name}".`
-            });
+            issues.push(createIssue("error", "invalid-frontmatter-name", "SKILL.md", `Frontmatter name must use lowercase letters, numbers, and single hyphens. Received "${attributes.name}".`, {
+                suggestion: "Rename the skill to a lowercase slug with hyphens only, for example customer-support."
+            }));
         }
     }
     if (attributes.description) {
         if (attributes.description.trim().length < 20) {
-            issues.push({
-                level: "warning",
-                message: "Frontmatter description should be at least 20 characters for clearer discovery."
-            });
+            issues.push(createIssue("warning", "short-frontmatter-description", "SKILL.md", "Frontmatter description should be at least 20 characters for clearer discovery.", {
+                suggestion: "Expand the description to mention the user outcome, domain, or workflow this skill covers."
+            }));
         }
         if (PLACEHOLDER_DESCRIPTION_PATTERNS.some((pattern) => pattern.test(attributes.description))) {
-            issues.push({
-                level: "warning",
-                message: "Frontmatter description looks like placeholder copy. Make it specific to the skill."
-            });
+            issues.push(createIssue("warning", "placeholder-frontmatter-description", "SKILL.md", "Frontmatter description looks like placeholder copy. Make it specific to the skill.", {
+                suggestion: "Describe the actual user task and value instead of generic scaffold language."
+            }));
         }
     }
 }
-function getReferencedMarkdownFiles(markdown) {
+function createIssue(level, code, file, message, options = {}) {
+    return {
+        level,
+        code,
+        file,
+        message,
+        suggestion: options.suggestion
+    };
+}
+function validateRecommendedSections(sections, issues) {
+    for (const item of RECOMMENDED_SECTION_HEADINGS) {
+        if (!sections.has(item.heading.toLowerCase())) {
+            issues.push(createIssue("warning", `missing-section-${item.heading.toLowerCase()}`, "SKILL.md", `SKILL.md should include a "## ${item.heading}" section.`, {
+                suggestion: item.suggestion
+            }));
+        }
+    }
+    const workflowBody = sections.get("workflow");
+    if (workflowBody && !/^\d+\.\s+/m.test(workflowBody)) {
+        issues.push(createIssue("warning", "workflow-not-numbered", "SKILL.md", 'The "## Workflow" section should include numbered steps.', {
+            suggestion: 'Rewrite the workflow as "1. ...", "2. ...", "3. ..." so another developer can follow it.'
+        }));
+    }
+}
+function extractSections(markdown) {
+    const sections = new Map();
+    const headingPattern = /^##\s+(.+)$/gm;
+    const matches = [...markdown.matchAll(headingPattern)];
+    for (let index = 0; index < matches.length; index += 1) {
+        const match = matches[index];
+        const heading = match[1]?.trim();
+        if (!heading || match.index === undefined) {
+            continue;
+        }
+        const sectionStart = match.index + match[0].length;
+        const sectionEnd = matches[index + 1]?.index ?? markdown.length;
+        sections.set(heading.toLowerCase(), markdown.slice(sectionStart, sectionEnd).trim());
+    }
+    return sections;
+}
+function getReferencedLocalFiles(markdown) {
     const references = new Set();
     const linkPattern = /\[[^\]]+\]\(([^)]+)\)/g;
     for (const match of markdown.matchAll(linkPattern)) {
@@ -150,7 +193,7 @@ function getReferencedMarkdownFiles(markdown) {
             .replace(/^<|>$/g, "")
             .split(/\s+/, 1)[0]
             .split("#", 1)[0];
-        if (!target || !target.toLowerCase().endsWith(".md")) {
+        if (!target) {
             continue;
         }
         if (target.startsWith("#") ||

@@ -5,13 +5,16 @@ import {
   DEFAULT_SKILL_MD,
   EXAMPLE_ASSET,
   EXAMPLE_REFERENCE,
-  EXAMPLE_SCRIPT
+  EXAMPLE_SCRIPT,
+  TEMPLATE_MODES,
+  type TemplateMode
 } from "../lib/templates";
 
 export interface InitOptions {
   targetDir: string;
   name?: string;
   description?: string;
+  template: TemplateMode;
   resources: string[];
   force: boolean;
 }
@@ -30,6 +33,7 @@ export async function runInit(options: InitOptions): Promise<void> {
   const title = titleCase(inferredName);
   const titleLower = title.toLowerCase();
   const description = options.description ?? `Guide the model through ${title.toLowerCase()} workflows with clear steps.`;
+  const resources = [...new Set([...TEMPLATE_MODES[options.template], ...options.resources])];
 
   const markdown = DEFAULT_SKILL_MD
     .replace(/{{name}}/g, inferredName)
@@ -39,7 +43,7 @@ export async function runInit(options: InitOptions): Promise<void> {
 
   await writeTextFile(skillFile, markdown);
 
-  for (const resource of options.resources) {
+  for (const resource of resources) {
     const resourceDir = path.join(skillDir, resource);
     await ensureDir(resourceDir);
 

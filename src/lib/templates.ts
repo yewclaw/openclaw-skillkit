@@ -24,10 +24,19 @@ Help the model execute {{title}} work with a predictable, reviewable workflow.
 - Keep the output focused on the user's requested outcome.
 `;
 
+export const TEMPLATE_MODES = {
+  minimal: [],
+  references: ["references"],
+  scripts: ["references", "scripts"],
+  full: ["references", "scripts", "assets"]
+} as const;
+
+export type TemplateMode = keyof typeof TEMPLATE_MODES;
+
 export const EXAMPLE_REFERENCE = `# Notes
 
 Store short supporting docs here that the skill can cite, summarize, or follow.
-Keep files task-specific so reviewers can see why each reference exists.
+Good examples: API quirks, policy notes, output rubrics, or edge-case checklists.
 `;
 
 export const EXAMPLE_SCRIPT = `#!/usr/bin/env bash
@@ -38,7 +47,7 @@ if [ "$#" -eq 0 ]; then
   exit 1
 fi
 
-echo "Replace this script with a real workflow for: $1"
+printf 'todo: replace with a real workflow for "%s"\n' "$1"
 `;
 
 export const EXAMPLE_ASSET = `Use this folder for reusable templates, prompts, or example outputs that support the skill.`;

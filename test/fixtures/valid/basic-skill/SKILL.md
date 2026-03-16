@@ -9,9 +9,10 @@ version: 1.2.3
 ## Purpose
 Help the model gather and summarize weather data.
 
-## Usage
-- Review the provided references before answering.
-- Use helper scripts for repeatable lookup flows.
+## Workflow
+1. Review the provided references before answering.
+2. Use helper scripts for repeatable lookup flows.
+3. Summarize the result with source-backed weather guidance.
 
 ## Constraints
 - Cite sources when making factual claims.

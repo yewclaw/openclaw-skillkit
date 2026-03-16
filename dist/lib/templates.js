@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.EXAMPLE_ASSET = exports.EXAMPLE_SCRIPT = exports.EXAMPLE_REFERENCE = exports.DEFAULT_SKILL_MD = void 0;
+exports.EXAMPLE_ASSET = exports.EXAMPLE_SCRIPT = exports.EXAMPLE_REFERENCE = exports.TEMPLATE_MODES = exports.DEFAULT_SKILL_MD = void 0;
 exports.DEFAULT_SKILL_MD = `---
 name: {{name}}
 description: {{description}}
@@ -26,10 +26,16 @@ Help the model execute {{title}} work with a predictable, reviewable workflow.
 - Prefer verifiable information over assumptions.
 - Keep the output focused on the user's requested outcome.
 `;
+exports.TEMPLATE_MODES = {
+    minimal: [],
+    references: ["references"],
+    scripts: ["references", "scripts"],
+    full: ["references", "scripts", "assets"]
+};
 exports.EXAMPLE_REFERENCE = `# Notes
 
 Store short supporting docs here that the skill can cite, summarize, or follow.
-Keep files task-specific so reviewers can see why each reference exists.
+Good examples: API quirks, policy notes, output rubrics, or edge-case checklists.
 `;
 exports.EXAMPLE_SCRIPT = `#!/usr/bin/env bash
 set -euo pipefail
@@ -39,6 +45,6 @@ if [ "$#" -eq 0 ]; then
   exit 1
 fi
 
-echo "Replace this script with a real workflow for: $1"
+printf 'todo: replace with a real workflow for "%s"\n' "$1"
 `;
 exports.EXAMPLE_ASSET = `Use this folder for reusable templates, prompts, or example outputs that support the skill.`;

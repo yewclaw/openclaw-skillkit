@@ -37,7 +37,7 @@ npm run verify
 Create a skill, validate it, and package it:
 
 ```bash
-npx openclaw-skillkit init skills/customer-support --resources references,scripts,assets
+npx openclaw-skillkit init skills/customer-support --template scripts
 $EDITOR skills/customer-support/SKILL.md
 npx openclaw-skillkit lint skills/customer-support
 npx openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
@@ -55,14 +55,23 @@ node bench/index.js --iterations 3
 
 ### 1. Start from a real scaffold
 
-`init` creates a ready-to-edit skill directory instead of another ad hoc markdown file.
+`init` creates a ready-to-edit skill directory instead of another ad hoc markdown file. Use template modes for the common cases, then add `--resources` only when you need to go off the happy path.
 
 ```bash
 openclaw-skillkit init skills/customer-support \
   --name customer-support \
   --description "Skill for support triage workflows" \
-  --resources references,scripts,assets
+  --template scripts
 ```
+
+Template modes:
+
+- `minimal`: `SKILL.md` only
+- `references`: adds `references/`
+- `scripts`: adds `references/` and `scripts/`
+- `full`: adds `references/`, `scripts/`, and `assets/`
+
+`--resources references,scripts,assets` still works and is merged with the selected template mode.
 
 Output:
 
@@ -87,10 +96,13 @@ skills/customer-support/
 - invalid semver-like versions
 - placeholder descriptions or scaffold body copy left in place
 - missing headings that make the skill hard to review
-- broken local markdown references
+- broken local file references
+- stable issue codes and fix suggestions for each finding
+- JSON output for CI, editor extensions, and custom tooling
 
 ```bash
 openclaw-skillkit lint skills/customer-support
+npx openclaw-skillkit lint skills/customer-support --json
 ```
 
 Example output:
@@ -98,6 +110,37 @@ Example output:
 ```text
 Linting /tmp/openclaw-skillkit-repo/examples/weather-research-skill
   OK: skill structure looks valid (1 file(s) checked).
+```
+
+Example actionable failure output:
+
+```text
+Linting /tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill
+  ERROR [invalid-frontmatter-version] SKILL.md: Frontmatter version must look like semver. Received "version1".
+    Fix: Use a semver-style version such as "0.1.0" or "1.2.3-beta.1".
+```
+
+Example JSON output:
+
+```json
+{
+  "skillDir": "/tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill",
+  "fileCount": 1,
+  "summary": {
+    "total": 4,
+    "errors": 2,
+    "warnings": 2
+  },
+  "issues": [
+    {
+      "level": "error",
+      "code": "invalid-frontmatter-version",
+      "file": "SKILL.md",
+      "message": "Frontmatter version must look like semver. Received \"version1\".",
+      "suggestion": "Use a semver-style version such as \"0.1.0\" or \"1.2.3-beta.1\"."
+    }
+  ]
+}
 ```
 
 ### 3. Package only when the skill is good enough to ship
@@ -120,7 +163,7 @@ openclaw-skillkit pack
 Use this when you want a simple authoring loop for a new skill:
 
 ```bash
-npx openclaw-skillkit init skills/weather-brief --resources references,scripts
+npx openclaw-skillkit init skills/weather-brief --template scripts
 $EDITOR skills/weather-brief/SKILL.md
 npx openclaw-skillkit lint skills/weather-brief
 npx openclaw-skillkit pack skills/weather-brief --output ./artifacts/weather-brief.skill

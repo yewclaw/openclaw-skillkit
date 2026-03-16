@@ -16,13 +16,14 @@ async function runInit(options) {
     const title = titleCase(inferredName);
     const titleLower = title.toLowerCase();
     const description = options.description ?? `Guide the model through ${title.toLowerCase()} workflows with clear steps.`;
+    const resources = [...new Set([...templates_1.TEMPLATE_MODES[options.template], ...options.resources])];
     const markdown = templates_1.DEFAULT_SKILL_MD
         .replace(/{{name}}/g, inferredName)
         .replace(/{{description}}/g, description)
         .replace(/{{title}}/g, title)
         .replace(/{{titleLower}}/g, titleLower);
     await (0, fs_1.writeTextFile)(skillFile, markdown);
-    for (const resource of options.resources) {
+    for (const resource of resources) {
         const resourceDir = path.join(skillDir, resource);
         await (0, fs_1.ensureDir)(resourceDir);
         if (resource === "references") {

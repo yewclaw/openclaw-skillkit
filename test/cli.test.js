@@ -8,6 +8,8 @@ const path = require("node:path");
 const { copyFixture, makeTempDir, readArchiveEntries } = require("./helpers/fixture.js");
 const { main } = require("../dist/cli.js");
 
+const serialTest = (name, fn) => test(name, { concurrency: false }, fn);
+
 function runCli(args, options = {}) {
   return captureCliOutput(args, options.cwd);
 }
@@ -57,7 +59,7 @@ async function captureCliOutput(args, cwd) {
   }
 }
 
-test("cli init scaffolds a skill with requested resources", async () => {
+serialTest("cli init scaffolds a skill with requested resources", async () => {
   const tempDir = await makeTempDir("openclaw-init-");
   const targetDir = path.join(tempDir, "customer-support");
 
@@ -74,7 +76,11 @@ test("cli init scaffolds a skill with requested resources", async () => {
 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Initialized skill at/);
-  assert.match(result.stdout, /Next: edit .*SKILL\.md, then run "openclaw-skillkit lint/);
+  assert.match(result.stdout, /Template: minimal/);
+  assert.match(result.stdout, /Created: SKILL\.md, references\/, scripts\/, assets\//);
+  assert.match(result.stdout, /Next: edit .*SKILL\.md/);
+  assert.match(result.stdout, /Then: openclaw-skillkit lint /);
+  assert.match(result.stdout, /Ship: openclaw-skillkit pack /);
   assert.match(await fs.readFile(path.join(targetDir, "SKILL.md"), "utf8"), /name: customer-support/);
   assert.doesNotMatch(await fs.readFile(path.join(targetDir, "SKILL.md"), "utf8"), /Explain what this skill helps the model do\./);
   await fs.access(path.join(targetDir, "references", "README.md"));
@@ -82,7 +88,27 @@ test("cli init scaffolds a skill with requested resources", async () => {
   await fs.access(path.join(targetDir, "assets", "README.txt"));
 });
 
-test("cli lint succeeds for a valid fixture", async () => {
+serialTest("cli init template modes scaffold practical layouts", async () => {
+  const tempDir = await makeTempDir("openclaw-init-template-");
+  const scriptsDir = path.join(tempDir, "ops-skill");
+  const fullDir = path.join(tempDir, "full-skill");
+
+  const scriptsResult = await runCli(["init", scriptsDir, "--template", "scripts"]);
+  const fullResult = await runCli(["init", fullDir, "--template", "full"]);
+
+  assert.equal(scriptsResult.code, 0, scriptsResult.stderr);
+  assert.match(scriptsResult.stdout, /Template: scripts/);
+  await fs.access(path.join(scriptsDir, "references", "README.md"));
+  await fs.access(path.join(scriptsDir, "scripts", "example.sh"));
+  await assert.rejects(fs.access(path.join(scriptsDir, "assets", "README.txt")));
+
+  assert.equal(fullResult.code, 0, fullResult.stderr);
+  await fs.access(path.join(fullDir, "references", "README.md"));
+  await fs.access(path.join(fullDir, "scripts", "example.sh"));
+  await fs.access(path.join(fullDir, "assets", "README.txt"));
+});
+
+serialTest("cli lint succeeds for a valid fixture", async () => {
   const tempDir = await makeTempDir("openclaw-lint-valid-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -91,9 +117,10 @@ test("cli lint succeeds for a valid fixture", async () => {
 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /OK: skill structure looks valid/);
+  assert.match(result.stdout, /Ready: openclaw-skillkit pack /);
 });
 
-test("cli lint fails for an invalid fixture", async () => {
+serialTest("cli lint fails for an invalid fixture", async () => {
   const tempDir = await makeTempDir("openclaw-lint-invalid-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("invalid", "bad-version-skill"), skillDir);
@@ -101,12 +128,13 @@ test("cli lint fails for an invalid fixture", async () => {
   const result = await runCli(["lint", skillDir]);
 
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /Frontmatter version must look like semver/);
-  assert.match(result.stdout, /Frontmatter name must be at least 3 characters/);
+  assert.match(result.stdout, /ERROR \[invalid-frontmatter-version\] SKILL\.md: Frontmatter version must look like semver/);
+  assert.match(result.stdout, /Fix: Use a semver-style version such as "0\.1\.0" or "1\.2\.3-beta\.1"\./);
+  assert.match(result.stdout, /ERROR \[short-frontmatter-name\] SKILL\.md: Frontmatter name must be at least 3 characters/);
   assert.match(result.stdout, /Next: fix the errors above before running pack\./);
 });
 
-test("cli lint reports broken markdown references", async () => {
+serialTest("cli lint reports broken markdown references", async () => {
   const tempDir = await makeTempDir("openclaw-lint-reference-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("benchmark", "bad", "broken-reference-skill"), skillDir);
@@ -114,10 +142,32 @@ test("cli lint reports broken markdown references", async () => {
   const result = await runCli(["lint", skillDir]);
 
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /Referenced markdown file not found: references\/missing\.md/);
+  assert.match(result.stdout, /Referenced local file not found: references\/missing\.md/);
 });
 
-test("cli pack creates a .skill archive for a valid fixture", async () => {
+serialTest("cli lint supports json output for CI and editor tooling", async () => {
+  const tempDir = await makeTempDir("openclaw-lint-json-");
+  const skillDir = path.join(tempDir, "skill");
+  await copyFixture(path.join("invalid", "bad-version-skill"), skillDir);
+
+  const result = await runCli(["lint", skillDir, "--json"]);
+
+  assert.equal(result.code, 1);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.skillDir, skillDir);
+  assert.deepEqual(payload.summary, {
+    errors: 2,
+    warnings: 2,
+    total: 4
+  });
+  assert.deepEqual(payload.issues.slice(0, 2).map((issue) => issue.code), [
+    "invalid-frontmatter-version",
+    "short-frontmatter-name"
+  ]);
+  assert.match(payload.issues[0].suggestion, /semver-style version/);
+});
+
+serialTest("cli pack creates a .skill archive for a valid fixture", async () => {
   const tempDir = await makeTempDir("openclaw-pack-valid-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
@@ -126,7 +176,8 @@ test("cli pack creates a .skill archive for a valid fixture", async () => {
   const result = await runCli(["pack", skillDir, "--output", outputPath]);
 
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /Packed 4 file\(s\) into/);
+  assert.match(result.stdout, /Archive ready: /);
+  assert.match(result.stdout, /Included 4 file\(s\), /);
   const entries = await readArchiveEntries(outputPath);
   assert.deepEqual(entries.sort(), [
     "SKILL.md",
@@ -136,7 +187,7 @@ test("cli pack creates a .skill archive for a valid fixture", async () => {
   ]);
 });
 
-test("cli pack surfaces warnings before creating the archive", async () => {
+serialTest("cli pack surfaces warnings before creating the archive", async () => {
   const tempDir = await makeTempDir("openclaw-pack-warning-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
@@ -148,7 +199,7 @@ test("cli pack surfaces warnings before creating the archive", async () => {
   assert.doesNotMatch(result.stdout, /Packing with \d+ warning\(s\):/);
 });
 
-test("cli pack fails when lint errors exist", async () => {
+serialTest("cli pack fails when lint errors exist", async () => {
   const tempDir = await makeTempDir("openclaw-pack-invalid-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("invalid", "bad-version-skill"), skillDir);
@@ -159,7 +210,7 @@ test("cli pack fails when lint errors exist", async () => {
   assert.match(result.stderr, /Cannot pack .* because lint found 2 error\(s\)\./);
 });
 
-test("cli pack defaults to the current directory", async () => {
+serialTest("cli pack defaults to the current directory", async () => {
   const tempDir = await makeTempDir("openclaw-pack-cwd-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -167,11 +218,35 @@ test("cli pack defaults to the current directory", async () => {
   const result = await runCli(["pack"], { cwd: skillDir });
 
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /Packed 4 file\(s\) into/);
+  assert.match(result.stdout, /Archive ready: /);
   await fs.access(path.join(tempDir, "skill.skill"));
 });
 
-test("cli help supports command-specific output", async () => {
+serialTest("cli pack appends .skill and creates the output directory when needed", async () => {
+  const tempDir = await makeTempDir("openclaw-pack-output-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifacts", "release", "artifact");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+
+  const result = await runCli(["pack", skillDir, "--output", outputPath]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Output path did not end in \.skill\. Using /);
+  await fs.access(`${outputPath}.skill`);
+});
+
+serialTest("cli pack rejects unsupported output extensions", async () => {
+  const tempDir = await makeTempDir("openclaw-pack-extension-");
+  const skillDir = path.join(tempDir, "skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+
+  const result = await runCli(["pack", skillDir, "--output", "./artifact.zip"]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /Output must end with "\.skill"\. Received "\.\/artifact\.zip"\./);
+});
+
+serialTest("cli help supports command-specific output", async () => {
   const result = await runCli(["help", "pack"]);
 
   assert.equal(result.code, 0, result.stderr);
@@ -180,9 +255,16 @@ test("cli help supports command-specific output", async () => {
   assert.match(result.stdout, /openclaw-skillkit pack$/m);
 });
 
-test("cli rejects unknown flags with a clear error", async () => {
+serialTest("cli rejects unknown flags with a clear error", async () => {
   const result = await runCli(["lint", "--output", "./artifact.skill"]);
 
   assert.equal(result.code, 1);
-  assert.match(result.stderr, /Unknown flag\(s\): --output\. This command supports no flags and --help\./);
+  assert.match(result.stderr, /Unknown flag\(s\): --output\. This command supports --format, --json and --help\./);
+});
+
+serialTest("cli lint rejects conflicting format flags", async () => {
+  const result = await runCli(["lint", "--json", "--format", "text"]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /Use either --json or --format, not both\./);
 });

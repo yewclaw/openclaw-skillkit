@@ -9,8 +9,10 @@ version: 1.0.0
 ## Purpose
 Guide the model to use the bundled reference for stable instructions.
 
-## Usage
-Read [the reference](references/guide.md) before answering.
+## Workflow
+1. Read [the reference](references/guide.md) before answering.
+2. Extract the relevant instruction or fact.
+3. Answer using the local guide as the primary source.
 
 ## Constraints
 Keep the answer aligned with the local guide.

@@ -8,3 +8,11 @@ version: 1.0.0
 
 ## Purpose
 Handle a small, well-defined workflow without extra ceremony.
+
+## Workflow
+1. Confirm the user goal.
+2. Follow the documented steps.
+3. Return a concise result.
+
+## Constraints
+- Avoid inventing missing facts.
