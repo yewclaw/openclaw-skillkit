@@ -14,7 +14,7 @@ async function runInit(options) {
     await (0, fs_1.ensureDir)(skillDir);
     const inferredName = options.name ?? path.basename(skillDir);
     const title = titleCase(inferredName);
-    const description = options.description ?? `OpenClaw skill for ${title}.`;
+    const description = options.description ?? `Guide the model through ${title.toLowerCase()} workflows with clear steps.`;
     const markdown = templates_1.DEFAULT_SKILL_MD
         .replace(/{{name}}/g, inferredName)
         .replace(/{{description}}/g, description)

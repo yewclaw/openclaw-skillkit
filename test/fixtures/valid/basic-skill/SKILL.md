@@ -1,6 +1,6 @@
 ---
 name: weather-research
-description: Skill for structured weather research.
+description: Skill for structured weather research with grounded source notes.
 version: 1.2.3
 ---
 

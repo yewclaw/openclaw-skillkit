@@ -103,6 +103,17 @@ test("cli lint fails for an invalid fixture", async () => {
   assert.match(result.stdout, /Frontmatter name must be at least 3 characters/);
 });
 
+test("cli lint reports broken markdown references", async () => {
+  const tempDir = await makeTempDir("openclaw-lint-reference-");
+  const skillDir = path.join(tempDir, "skill");
+  await copyFixture(path.join("benchmark", "bad", "broken-reference-skill"), skillDir);
+
+  const result = await runCli(["lint", skillDir]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /Referenced markdown file not found: references\/missing\.md/);
+});
+
 test("cli pack creates a .skill archive for a valid fixture", async () => {
   const tempDir = await makeTempDir("openclaw-pack-valid-");
   const skillDir = path.join(tempDir, "skill");

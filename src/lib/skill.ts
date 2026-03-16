@@ -14,6 +14,11 @@ export interface LintResult {
 }
 
 const OPTIONAL_DIRECTORIES = ["references", "scripts", "assets", "examples"];
+const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const PLACEHOLDER_DESCRIPTION_PATTERNS = [
+  /\b(todo|tbd|placeholder|fill in|write a description)\b/i,
+  /^openclaw skill for\b/i
+];
 
 export async function lintSkill(skillDir: string): Promise<LintResult> {
   const issues: LintIssue[] = [];
@@ -79,6 +84,18 @@ export async function lintSkill(skillDir: string): Promise<LintResult> {
     });
   }
 
+  for (const reference of getReferencedMarkdownFiles(frontmatterBody)) {
+    const referencePath = path.resolve(skillDir, reference);
+    if (await exists(referencePath)) {
+      continue;
+    }
+
+    issues.push({
+      level: "error",
+      message: `Referenced markdown file not found: ${reference}`
+    });
+  }
+
   for (const directoryName of OPTIONAL_DIRECTORIES) {
     const directoryPath = path.join(skillDir, directoryName);
     if (await exists(directoryPath)) {
@@ -118,10 +135,68 @@ function validateFrontmatter(
     });
   }
 
-  if (attributes.name && attributes.name.length < 3) {
-    issues.push({
-      level: "error",
-      message: "Frontmatter name must be at least 3 characters."
-    });
+  if (attributes.name) {
+    if (attributes.name.length < 3) {
+      issues.push({
+        level: "error",
+        message: "Frontmatter name must be at least 3 characters."
+      });
+    }
+
+    if (!SKILL_NAME_PATTERN.test(attributes.name)) {
+      issues.push({
+        level: "error",
+        message: `Frontmatter name must use lowercase letters, numbers, and single hyphens. Received "${attributes.name}".`
+      });
+    }
   }
+
+  if (attributes.description) {
+    if (attributes.description.trim().length < 20) {
+      issues.push({
+        level: "warning",
+        message: "Frontmatter description should be at least 20 characters for clearer discovery."
+      });
+    }
+
+    if (PLACEHOLDER_DESCRIPTION_PATTERNS.some((pattern) => pattern.test(attributes.description))) {
+      issues.push({
+        level: "warning",
+        message: "Frontmatter description looks like placeholder copy. Make it specific to the skill."
+      });
+    }
+  }
+}
+
+function getReferencedMarkdownFiles(markdown: string): string[] {
+  const references = new Set<string>();
+  const linkPattern = /\[[^\]]+\]\(([^)]+)\)/g;
+
+  for (const match of markdown.matchAll(linkPattern)) {
+    const rawTarget = match[1]?.trim();
+    if (!rawTarget) {
+      continue;
+    }
+
+    const target = rawTarget
+      .replace(/^<|>$/g, "")
+      .split(/\s+/, 1)[0]
+      .split("#", 1)[0];
+
+    if (!target || !target.toLowerCase().endsWith(".md")) {
+      continue;
+    }
+
+    if (
+      target.startsWith("#") ||
+      target.startsWith("/") ||
+      /^[a-z][a-z0-9+.-]*:/i.test(target)
+    ) {
+      continue;
+    }
+
+    references.add(target);
+  }
+
+  return [...references];
 }

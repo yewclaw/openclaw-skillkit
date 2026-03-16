@@ -1,48 +1,44 @@
 # openclaw-skillkit
 
-Build OpenClaw skills without building a framework around them.
+Ship OpenClaw skills that are easy to trust, easy to review, and easy to package.
 
-`openclaw-skillkit` is a lean TypeScript + Node.js CLI for the three jobs skill authors actually need on day one:
+Most skill repos fail adoption for boring reasons: the first skill is slow to scaffold, metadata is vague, local references break silently, and nobody can tell if quality is improving. `openclaw-skillkit` keeps that surface small:
 
-- `init` to scaffold a clean skill directory
-- `lint` to catch broken structure and bad frontmatter early
-- `pack` to turn a skill into a portable `.skill` archive
+- `init` creates a clean skill directory in seconds
+- `lint` catches structural and metadata mistakes before they spread
+- `pack` builds a portable `.skill` archive from a validated skill
+- `bench` measures detection quality and a repeatable CLI workflow without extra dependencies
 
-The project is intentionally small, readable, and easy to fork. The goal is fast adoption, not ceremony.
+The project is intentionally lean. No runtime dependencies. No framework around skills. Just a readable Node.js CLI that helps a team adopt a real skill workflow quickly.
 
-## Verification Pipeline
-
-One local command runs the repository's full MVP verification pipeline:
-
-```bash
-npm run verify
-```
-
-That command runs:
-
-- `npm test` for the built CLI and library test suite
-
-`npm test` uses Node's built-in test runner and exercises the checked-in CLI and library build without adding a separate test framework.
-
-If you are editing TypeScript sources and have dependencies installed, `npm run check` and `npm run build` remain available as explicit maintenance commands.
-
-## Quickstart
+## Quick Demo
 
 ```bash
 npm install
 npm run verify
+
 npx openclaw-skillkit init my-skill --resources references,scripts,assets
 npx openclaw-skillkit lint my-skill
 npx openclaw-skillkit pack my-skill
 ```
 
-If you want to run the checked-in build directly in this repo:
+If you want to use the checked-in build directly:
 
 ```bash
-node dist/cli.js init my-skill --resources references,scripts
+node dist/cli.js init my-skill --resources references,scripts,assets
 node dist/cli.js lint my-skill
 node dist/cli.js pack my-skill
+node bench/index.js
 ```
+
+## Why It Converts
+
+`openclaw-skillkit` is built for the first five minutes of evaluation:
+
+- a visitor can understand the product from one screen
+- a teammate can scaffold and lint a real skill immediately
+- a maintainer can measure quality with fixture-driven benchmarks instead of intuition
+- CI runs the same local `verify` command that contributors run
 
 ## Commands
 
@@ -72,13 +68,14 @@ skills/customer-support/
 
 ### `lint`
 
-Validate a skill directory. Current checks:
+Validate a skill directory with practical checks:
 
-- `SKILL.md` exists and is not empty
-- frontmatter is parseable
-- `name`, `description`, and `version` are checked if frontmatter exists
-- the markdown contains a title and at least one section
-- common resource directories are flagged as optional warnings when absent
+- `SKILL.md` exists, is non-empty, and has parseable frontmatter
+- `name`, `description`, and `version` are checked for useful metadata
+- skill names must be lowercase slug-style identifiers
+- placeholder descriptions are flagged before they hurt discovery
+- broken local markdown references in `SKILL.md` are reported as errors
+- missing top-level and section headings are surfaced
 
 ```bash
 openclaw-skillkit lint skills/customer-support
@@ -95,18 +92,48 @@ Summary: 0 error(s), 2 warning(s).
 
 ### `pack`
 
-Package a skill directory into a `.skill` archive. The archive format is a standard ZIP container with a `.skill` extension.
+Package a skill directory into a `.skill` archive. `pack` runs lint first and refuses to build an archive if lint errors exist.
 
 ```bash
 openclaw-skillkit pack skills/customer-support
 openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
 ```
 
-`pack` runs lint checks first and refuses to build an archive if lint errors exist.
+## How Quality Is Measured
+
+The repo now includes a lightweight measurement loop under [`bench/`](/tmp/openclaw-skillkit-repo/bench):
+
+- `bench/run-detection-benchmark.js` scores good-vs-bad skill detection using labeled fixtures in [`test/fixtures/benchmark/`](/tmp/openclaw-skillkit-repo/test/fixtures/benchmark)
+- `bench/run-cli-benchmark.js` measures a repeatable CLI workflow: `lint` on the example skill and an `init -> lint -> pack` round trip
+- `npm run bench` prints both reports
+
+That keeps iteration grounded in concrete signals instead of anecdotal “seems better” feedback.
+
+## Verification
+
+One command runs the repo verification path used in CI:
+
+```bash
+npm run verify
+```
+
+That command runs:
+
+- `npm test` for fixture-driven CLI and library coverage
+- `npm run bench` for quality and DX measurement output
+
+If you are editing TypeScript sources, these maintenance commands stay available:
+
+```bash
+npm run check
+npm run build
+```
+
+GitHub Actions runs the same `npm run verify` command in [`.github/workflows/ci.yml`](/tmp/openclaw-skillkit-repo/.github/workflows/ci.yml).
 
 ## Example Skill
 
-A minimal example lives in `examples/weather-research-skill/`.
+A minimal example lives in [`examples/weather-research-skill/`](/tmp/openclaw-skillkit-repo/examples/weather-research-skill).
 
 Use it to test the toolkit quickly:
 
@@ -117,42 +144,15 @@ node dist/cli.js pack examples/weather-research-skill
 
 ## Tests
 
-The test suite lives under `test/` and stays intentionally lean:
+The test suite stays intentionally lean:
 
-- library coverage for frontmatter parsing and lint behavior
-- fixture-driven valid and invalid skills under `test/fixtures/`
+- library coverage for parsing, lint rules, and evaluation metrics
+- fixture-driven valid, invalid, and benchmark skill cases under [`test/fixtures/`](/tmp/openclaw-skillkit-repo/test/fixtures)
 - CLI integration coverage for `init`, `lint`, and `pack`
 - archive-content checks for generated `.skill` files without extra dependencies
 
-For local iteration:
-
-```bash
-npm test
-```
-
-For the same pipeline used in CI:
-
-```bash
-npm run verify
-```
-
-GitHub Actions runs that exact command in [`.github/workflows/ci.yml`](/tmp/openclaw-skillkit-repo/.github/workflows/ci.yml).
-
-## Project Layout
-
-```text
-src/
-  cli.ts
-  commands/
-  lib/
-dist/
-  cli.js
-examples/
-  weather-research-skill/
-```
-
 ## Notes
 
-- Runtime dependencies are intentionally avoided to keep the MVP portable.
-- The checked-in `dist/` build lets the repo work immediately even before local compilation.
+- Runtime dependencies are intentionally avoided to keep the toolkit portable.
+- The checked-in `dist/` build lets the repo work immediately before local compilation.
 - `npm run build` uses `tsc` once dependencies are installed.
