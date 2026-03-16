@@ -60,6 +60,7 @@ async function handleInit(parsed: ReturnType<typeof parseArgs>): Promise<void> {
   });
 
   console.log(`Initialized skill at ${targetDir}`);
+  console.log(`Next: edit ${targetDir}/SKILL.md, then run "openclaw-skillkit lint ${targetDir}"`);
 }
 
 async function handleLint(parsed: ReturnType<typeof parseArgs>): Promise<void> {
@@ -75,10 +76,7 @@ async function handlePack(parsed: ReturnType<typeof parseArgs>): Promise<void> {
   assertNoUnexpectedFlags(parsed, ["output"]);
   assertArgumentCount(parsed, 1, "pack expects exactly 1 target directory.");
 
-  const targetDir = parsed.positionals[0];
-  if (!targetDir) {
-    throw new Error('pack requires a target directory. Run "openclaw-skillkit help pack" for examples.');
-  }
+  const targetDir = parsed.positionals[0] ?? ".";
 
   const output = typeof getFlag(parsed, "output") === "string" ? String(getFlag(parsed, "output")) : undefined;
   await runPack(targetDir, output);
@@ -87,7 +85,10 @@ async function handlePack(parsed: ReturnType<typeof parseArgs>): Promise<void> {
 function assertNoUnexpectedFlags(parsed: ReturnType<typeof parseArgs>, allowed: string[]): void {
   const unexpected = [...parsed.flags.keys()].filter((flag) => flag !== "help" && !allowed.includes(flag));
   if (unexpected.length > 0) {
-    throw new Error(`Unknown flag(s): ${unexpected.map((flag) => `--${flag}`).join(", ")}.`);
+    const allowedFlags = allowed.length > 0 ? allowed.map((flag) => `--${flag}`).join(", ") : "no flags";
+    throw new Error(
+      `Unknown flag(s): ${unexpected.map((flag) => `--${flag}`).join(", ")}. This command supports ${allowedFlags} and --help.`
+    );
   }
 }
 
@@ -134,9 +135,10 @@ Examples:
 Create a .skill archive after lint passes.
 
 Usage:
-  openclaw-skillkit pack <dir> [--output ./dist/my-skill.skill]
+  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill]
 
 Examples:
+  openclaw-skillkit pack
   openclaw-skillkit pack skills/customer-support
   openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
 `);
@@ -150,7 +152,7 @@ Build, lint, and pack OpenClaw skills.
 Usage:
   openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--resources references,scripts,assets] [--force]
   openclaw-skillkit lint [dir]
-  openclaw-skillkit pack <dir> [--output ./dist/my-skill.skill]
+  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill]
 
 Help:
   openclaw-skillkit help

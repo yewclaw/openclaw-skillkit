@@ -13,7 +13,6 @@ export interface LintResult {
   fileCount: number;
 }
 
-const OPTIONAL_DIRECTORIES = ["references", "scripts", "assets", "examples"];
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const PLACEHOLDER_DESCRIPTION_PATTERNS = [
   /\b(todo|tbd|placeholder|fill in|write a description)\b/i,
@@ -106,18 +105,6 @@ export async function lintSkill(skillDir: string): Promise<LintResult> {
     issues.push({
       level: "error",
       message: `Referenced markdown file not found: ${reference}`
-    });
-  }
-
-  for (const directoryName of OPTIONAL_DIRECTORIES) {
-    const directoryPath = path.join(skillDir, directoryName);
-    if (await exists(directoryPath)) {
-      continue;
-    }
-
-    issues.push({
-      level: "warning",
-      message: `Optional directory not found: ${directoryName}/`
     });
   }
 

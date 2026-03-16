@@ -19,5 +19,10 @@ export async function runLint(targetDir: string): Promise<number> {
   }
 
   console.log(`Summary: ${errors.length} error(s), ${warnings.length} warning(s), ${result.fileCount} file(s) checked.`);
+  if (errors.length > 0) {
+    console.log("Next: fix the errors above before running pack.");
+  } else if (warnings.length > 0) {
+    console.log("Next: review the warnings above. Pack will still work.");
+  }
   return errors.length === 0 ? 0 : 1;
 }

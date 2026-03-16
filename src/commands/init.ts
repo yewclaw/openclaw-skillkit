@@ -28,12 +28,14 @@ export async function runInit(options: InitOptions): Promise<void> {
 
   const inferredName = options.name ?? path.basename(skillDir);
   const title = titleCase(inferredName);
+  const titleLower = title.toLowerCase();
   const description = options.description ?? `Guide the model through ${title.toLowerCase()} workflows with clear steps.`;
 
   const markdown = DEFAULT_SKILL_MD
     .replace(/{{name}}/g, inferredName)
     .replace(/{{description}}/g, description)
-    .replace(/{{title}}/g, title);
+    .replace(/{{title}}/g, title)
+    .replace(/{{titleLower}}/g, titleLower);
 
   await writeTextFile(skillFile, markdown);
 

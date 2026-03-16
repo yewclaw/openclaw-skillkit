@@ -24,6 +24,7 @@ async function runPack(targetDir, outputPath) {
         for (const warning of warnings) {
             console.log(`  WARNING: ${warning.message}`);
         }
+        console.log("Proceeding anyway because warnings do not block packaging.");
     }
     const fileCount = await (0, zip_1.createSkillArchive)(resolvedDir, destination);
     console.log(`Packed ${fileCount} file(s) into ${destination}`);

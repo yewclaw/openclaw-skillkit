@@ -43,17 +43,12 @@ name sample-skill
   );
 });
 
-test("lintSkill accepts a valid fixture with only optional-directory warnings removed", async () => {
+test("lintSkill accepts a valid fixture without optional-directory noise", async () => {
   const skillDir = path.resolve(__dirname, "fixtures", "valid", "basic-skill");
   const result = await lintSkill(skillDir);
 
   assert.equal(result.fileCount, 1);
-  assert.deepEqual(result.issues, [
-    {
-      level: "warning",
-      message: "Optional directory not found: examples/"
-    }
-  ]);
+  assert.deepEqual(result.issues, []);
 });
 
 test("lintSkill reports missing skill file", async () => {

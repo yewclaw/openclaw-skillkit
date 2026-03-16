@@ -29,7 +29,7 @@ npx openclaw-skillkit help pack
 npx openclaw-skillkit init demo-skill --resources references,scripts
 $EDITOR demo-skill/SKILL.md
 npx openclaw-skillkit lint demo-skill
-npx openclaw-skillkit pack demo-skill --output ./artifacts/demo-skill.skill
+cd demo-skill && npx openclaw-skillkit pack --output ../artifacts/demo-skill.skill
 ```
 
 If you want to use the checked-in build directly:
@@ -96,9 +96,7 @@ Example output:
 
 ```text
 Linting /tmp/openclaw-skillkit-repo/examples/weather-research-skill
-  WARNING: Optional directory not found: assets/
-  WARNING: Optional directory not found: examples/
-Summary: 0 error(s), 2 warning(s), 1 file(s) checked.
+  OK: skill structure looks valid (1 file(s) checked).
 ```
 
 ### `pack`
@@ -107,7 +105,10 @@ Package a skill directory into a `.skill` archive. `pack` runs lint first and re
 
 Warnings remain visible during `pack`, so reviewers can still spot weak metadata or incomplete structure before sharing the archive.
 
+If you are already inside the skill directory, `pack` defaults to the current working directory:
+
 ```bash
+openclaw-skillkit pack
 openclaw-skillkit pack skills/customer-support
 openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
 ```

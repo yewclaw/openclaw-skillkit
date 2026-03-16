@@ -4,7 +4,6 @@ exports.lintSkill = lintSkill;
 const path = require("node:path");
 const fs_1 = require("./fs");
 const frontmatter_1 = require("./frontmatter");
-const OPTIONAL_DIRECTORIES = ["references", "scripts", "assets", "examples"];
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const PLACEHOLDER_DESCRIPTION_PATTERNS = [
     /\b(todo|tbd|placeholder|fill in|write a description)\b/i,
@@ -87,16 +86,6 @@ async function lintSkill(skillDir) {
         issues.push({
             level: "error",
             message: `Referenced markdown file not found: ${reference}`
-        });
-    }
-    for (const directoryName of OPTIONAL_DIRECTORIES) {
-        const directoryPath = path.join(skillDir, directoryName);
-        if (await (0, fs_1.exists)(directoryPath)) {
-            continue;
-        }
-        issues.push({
-            level: "warning",
-            message: `Optional directory not found: ${directoryName}/`
         });
     }
     return {

@@ -14,11 +14,13 @@ async function runInit(options) {
     await (0, fs_1.ensureDir)(skillDir);
     const inferredName = options.name ?? path.basename(skillDir);
     const title = titleCase(inferredName);
+    const titleLower = title.toLowerCase();
     const description = options.description ?? `Guide the model through ${title.toLowerCase()} workflows with clear steps.`;
     const markdown = templates_1.DEFAULT_SKILL_MD
         .replace(/{{name}}/g, inferredName)
         .replace(/{{description}}/g, description)
-        .replace(/{{title}}/g, title);
+        .replace(/{{title}}/g, title)
+        .replace(/{{titleLower}}/g, titleLower);
     await (0, fs_1.writeTextFile)(skillFile, markdown);
     for (const resource of options.resources) {
         const resourceDir = path.join(skillDir, resource);

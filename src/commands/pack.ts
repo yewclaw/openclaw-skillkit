@@ -26,6 +26,7 @@ export async function runPack(targetDir: string, outputPath?: string): Promise<v
     for (const warning of warnings) {
       console.log(`  WARNING: ${warning.message}`);
     }
+    console.log("Proceeding anyway because warnings do not block packaging.");
   }
 
   const fileCount = await createSkillArchive(resolvedDir, destination);
