@@ -30,6 +30,7 @@ export async function runLint(targetDir: string, options: RunLintOptions): Promi
   if (summary.total === 0) {
     console.log(`  OK: skill structure looks valid (${result.fileCount} file(s) checked).`);
     console.log(`  Ready: openclaw-skillkit pack ${resolved}`);
+    console.log(`  Inspect after packing: openclaw-skillkit inspect ${resolved}.skill`);
     return 0;
   }
 

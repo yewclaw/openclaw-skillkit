@@ -59,6 +59,20 @@ export async function runInit(options: InitOptions): Promise<void> {
   }
 }
 
+export function getExampleSkillForTemplate(template: TemplateMode, resources: string[]): string {
+  const effectiveResources = new Set([...TEMPLATE_MODES[template], ...resources]);
+
+  if (effectiveResources.has("scripts")) {
+    return "examples/weather-research-skill";
+  }
+
+  if (effectiveResources.has("references")) {
+    return "examples/customer-support-triage-skill";
+  }
+
+  return "examples/release-notes-skill";
+}
+
 function titleCase(value: string): string {
   return value
     .split(/[-_\s]+/)

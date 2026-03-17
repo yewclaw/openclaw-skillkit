@@ -21,6 +21,7 @@
 | `init` | Generate a consistent skill layout with optional `references/`, `scripts/`, and `assets/`. |
 | `lint` | Catch weak metadata, placeholder copy, missing sections, and broken local references before review. |
 | `pack` | Create a `.skill` archive only after validation passes, with a manifest included for inspection. |
+| `inspect` | Read a packaged archive back out and verify exactly what skill metadata and files it contains. |
 | `benchmark` | Measure fixture detection quality and CLI round-trip performance with repeatable runs. |
 
 ## Why This Exists
@@ -53,6 +54,7 @@ npx openclaw-skillkit init skills/customer-support --template scripts
 $EDITOR skills/customer-support/SKILL.md
 npx openclaw-skillkit lint skills/customer-support
 npx openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
+npx openclaw-skillkit inspect ./artifacts/customer-support.skill
 ```
 
 If you want to use the checked-in build directly:
@@ -100,6 +102,8 @@ skills/customer-support/
     └── example.sh
 ```
 
+The generated `SKILL.md` now includes practical sections for `Inputs`, `Output`, and a short customization checklist so authors can move from scaffold to reviewable skill with fewer guesswork edits.
+
 ### 2. Catch trust-breaking issues early
 
 `lint` checks the failure modes that usually make skills hard to review or reuse:
@@ -125,6 +129,8 @@ Example success output:
 ```text
 Linting /tmp/openclaw-skillkit-repo/examples/weather-research-skill
   OK: skill structure looks valid (1 file(s) checked).
+  Ready: openclaw-skillkit pack /tmp/openclaw-skillkit-repo/examples/weather-research-skill
+  Inspect after packing: openclaw-skillkit inspect /tmp/openclaw-skillkit-repo/examples/weather-research-skill.skill
 ```
 
 Example actionable failure output:
@@ -185,12 +191,33 @@ Example JSON output:
 ```bash
 openclaw-skillkit pack skills/customer-support
 openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
+openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill --json
 ```
 
 If you are already inside a skill directory:
 
 ```bash
 openclaw-skillkit pack
+```
+
+Example success output:
+
+```text
+Archive ready: /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill
+  Skill: customer-support@0.1.0 (4 bundled file(s) plus manifest, 1.3 KB).
+  Contents: SKILL.md, references/README.md, scripts/example.sh, assets/README.txt
+  Inspect: openclaw-skillkit inspect /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill
+```
+
+`pack --json` emits archive metadata for CI artifacts, release automation, or editor tooling.
+
+### 4. Inspect the final artifact before publishing
+
+Use `inspect` to verify the packaged manifest instead of trusting a zip file blindly:
+
+```bash
+openclaw-skillkit inspect ./artifacts/customer-support.skill
+openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 ```
 
 ## Commands
@@ -200,7 +227,8 @@ openclaw-skillkit pack
 | `openclaw-skillkit help` | Show CLI help. |
 | `openclaw-skillkit help init` | Show scaffold options and flags. |
 | `openclaw-skillkit help lint` | Show lint modes, including JSON output. |
-| `openclaw-skillkit help pack` | Show packaging behavior and output options. |
+| `openclaw-skillkit help pack` | Show packaging behavior, output options, and JSON reporting. |
+| `openclaw-skillkit help inspect` | Show artifact inspection usage. |
 | `npm run benchmark -- --help` | Show benchmark runner flags. |
 | `npm run check` | Type-check without emitting build output. |
 | `npm run build` | Compile the CLI into `dist/`. |
@@ -219,7 +247,8 @@ openclaw-skillkit pack
 The repo keeps the trust boundary explicit:
 
 - `pack` is gated by lint, so broken skills do not get archived by accident
-- packaged archives include a manifest and avoid recursively bundling old `.skill` artifacts
+- packaged archives include skill metadata plus per-file sizes, and avoid recursively bundling old `.skill` artifacts
+- `inspect` lets authors and reviewers confirm the manifest from the built artifact itself
 - fixture-driven tests cover parsing, linting, CLI behavior, and archive contents
 - `npm run verify` runs tests and benchmarks, and also typechecks plus rebuilds `dist/` when the local TypeScript compiler is available
 - GitHub Actions runs the same `npm run verify` command on pushes and pull requests

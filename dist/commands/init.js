@@ -1,18 +1,22 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runInit = runInit;
-const path = require("node:path");
+exports.getExampleSkillForTemplate = getExampleSkillForTemplate;
+const node_path_1 = __importDefault(require("node:path"));
 const promises_1 = require("node:fs/promises");
 const fs_1 = require("../lib/fs");
 const templates_1 = require("../lib/templates");
 async function runInit(options) {
-    const skillDir = path.resolve(options.targetDir);
-    const skillFile = path.join(skillDir, "SKILL.md");
+    const skillDir = node_path_1.default.resolve(options.targetDir);
+    const skillFile = node_path_1.default.join(skillDir, "SKILL.md");
     if ((await (0, fs_1.exists)(skillFile)) && !options.force) {
         throw new Error(`Refusing to overwrite existing file: ${skillFile}. Use --force to replace it.`);
     }
     await (0, fs_1.ensureDir)(skillDir);
-    const inferredName = options.name ?? path.basename(skillDir);
+    const inferredName = options.name ?? node_path_1.default.basename(skillDir);
     const title = titleCase(inferredName);
     const titleLower = title.toLowerCase();
     const description = options.description ?? `Guide the model through ${title.toLowerCase()} workflows with clear steps.`;
@@ -24,20 +28,30 @@ async function runInit(options) {
         .replace(/{{titleLower}}/g, titleLower);
     await (0, fs_1.writeTextFile)(skillFile, markdown);
     for (const resource of resources) {
-        const resourceDir = path.join(skillDir, resource);
+        const resourceDir = node_path_1.default.join(skillDir, resource);
         await (0, fs_1.ensureDir)(resourceDir);
         if (resource === "references") {
-            await (0, fs_1.writeTextFile)(path.join(resourceDir, "README.md"), templates_1.EXAMPLE_REFERENCE);
+            await (0, fs_1.writeTextFile)(node_path_1.default.join(resourceDir, "README.md"), templates_1.EXAMPLE_REFERENCE);
         }
         else if (resource === "scripts") {
-            const scriptFile = path.join(resourceDir, "example.sh");
+            const scriptFile = node_path_1.default.join(resourceDir, "example.sh");
             await (0, fs_1.writeTextFile)(scriptFile, templates_1.EXAMPLE_SCRIPT);
             await (0, promises_1.chmod)(scriptFile, 0o755);
         }
         else if (resource === "assets") {
-            await (0, fs_1.writeTextFile)(path.join(resourceDir, "README.txt"), templates_1.EXAMPLE_ASSET);
+            await (0, fs_1.writeTextFile)(node_path_1.default.join(resourceDir, "README.txt"), templates_1.EXAMPLE_ASSET);
         }
     }
+}
+function getExampleSkillForTemplate(template, resources) {
+    const effectiveResources = new Set([...templates_1.TEMPLATE_MODES[template], ...resources]);
+    if (effectiveResources.has("scripts")) {
+        return "examples/weather-research-skill";
+    }
+    if (effectiveResources.has("references")) {
+        return "examples/customer-support-triage-skill";
+    }
+    return "examples/release-notes-skill";
 }
 function titleCase(value) {
     return value

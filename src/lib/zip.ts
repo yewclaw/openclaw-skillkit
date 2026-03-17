@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { writeFile } from "node:fs/promises";
 import { listFilesRecursive } from "./fs";
+import { parseFrontmatter } from "./frontmatter";
 
 const crcTable = createCrcTable();
 const PACK_MANIFEST_PATH = ".openclaw-skillkit/manifest.json";
@@ -16,6 +17,24 @@ interface ZipEntry {
 export interface SkillArchiveSummary {
   fileCount: number;
   packagedEntries: string[];
+  manifest: SkillArchiveManifest;
+}
+
+export interface SkillArchiveManifest {
+  schemaVersion: number;
+  packagedAt: string;
+  sourceDir: string;
+  skill: {
+    name: string;
+    description: string;
+    version: string;
+  };
+  entryCount: number;
+  totalBytes: number;
+  entries: Array<{
+    path: string;
+    size: number;
+  }>;
 }
 
 export async function createSkillArchive(sourceDir: string, destinationFile: string): Promise<SkillArchiveSummary> {
@@ -23,19 +42,8 @@ export async function createSkillArchive(sourceDir: string, destinationFile: str
     .filter((file) => !file.relativePath.endsWith(".skill"))
     .sort(compareArchiveEntries);
   const packagedEntries = files.map((file) => normalizeArchivePath(file.relativePath));
-  const manifestBuffer = Buffer.from(
-    JSON.stringify(
-      {
-        schemaVersion: 1,
-        packagedAt: new Date().toISOString(),
-        sourceDir: path.basename(sourceDir),
-        entries: packagedEntries
-      },
-      null,
-      2
-    ),
-    "utf8"
-  );
+  const manifest = await buildArchiveManifest(sourceDir, files);
+  const manifestBuffer = Buffer.from(JSON.stringify(manifest, null, 2), "utf8");
   const chunks: Buffer[] = [];
   const entries: ZipEntry[] = [];
   let offset = 0;
@@ -74,8 +82,14 @@ export async function createSkillArchive(sourceDir: string, destinationFile: str
   await writeFile(destinationFile, Buffer.concat(chunks));
   return {
     fileCount: entries.length,
-    packagedEntries
+    packagedEntries,
+    manifest
   };
+}
+
+export async function readArchiveManifest(archivePath: string): Promise<SkillArchiveManifest> {
+  const manifest = await readArchiveEntry(archivePath, PACK_MANIFEST_PATH);
+  return JSON.parse(manifest) as SkillArchiveManifest;
 }
 
 function compareArchiveEntries(
@@ -95,6 +109,60 @@ function compareArchiveEntries(
 
 function normalizeArchivePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
+}
+
+async function buildArchiveManifest(
+  sourceDir: string,
+  files: Array<{ absolutePath: string; relativePath: string; size: number }>
+): Promise<SkillArchiveManifest> {
+  const skillMarkdown = await readFile(path.join(sourceDir, "SKILL.md"), "utf8");
+  const parsed = parseFrontmatter(skillMarkdown);
+
+  return {
+    schemaVersion: 1,
+    packagedAt: new Date().toISOString(),
+    sourceDir: path.basename(sourceDir),
+    skill: {
+      name: parsed.attributes.name ?? path.basename(sourceDir),
+      description: parsed.attributes.description ?? "",
+      version: parsed.attributes.version ?? ""
+    },
+    entryCount: files.length,
+    totalBytes: files.reduce((total, file) => total + file.size, 0),
+    entries: files.map((file) => ({
+      path: normalizeArchivePath(file.relativePath),
+      size: file.size
+    }))
+  };
+}
+
+async function readArchiveEntry(archivePath: string, entryName: string): Promise<string> {
+  const buffer = await readFile(archivePath);
+  let offset = 0;
+
+  while (offset + 30 <= buffer.length) {
+    const signature = buffer.readUInt32LE(offset);
+    if (signature !== 0x04034b50) {
+      break;
+    }
+
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const fileNameLength = buffer.readUInt16LE(offset + 26);
+    const extraFieldLength = buffer.readUInt16LE(offset + 28);
+    const fileNameStart = offset + 30;
+    const fileNameEnd = fileNameStart + fileNameLength;
+    const currentEntryName = buffer.toString("utf8", fileNameStart, fileNameEnd);
+    const dataStart = fileNameEnd + extraFieldLength;
+    const dataEnd = dataStart + compressedSize;
+
+    if (currentEntryName === entryName) {
+      return buffer.toString("utf8", dataStart, dataEnd);
+    }
+
+    offset = dataEnd;
+  }
+
+  throw new Error(`Archive entry not found: ${entryName}`);
 }
 
 function makeLocalFileHeader(name: string, crc32: number, size: number): Buffer {

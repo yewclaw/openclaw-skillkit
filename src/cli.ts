@@ -4,7 +4,9 @@ import { parseArgs, getFlag } from "./lib/args";
 import { runInit } from "./commands/init";
 import { runLint } from "./commands/lint";
 import { runPack } from "./commands/pack";
+import { runInspect } from "./commands/inspect";
 import { TEMPLATE_MODES, type TemplateMode } from "./lib/templates";
+import { getExampleSkillForTemplate } from "./commands/init";
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const parsed = parseArgs(argv);
@@ -24,6 +26,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       return;
     case "pack":
       await handlePack(parsed);
+      return;
+    case "inspect":
+      await handleInspect(parsed);
       return;
     case undefined:
       printHelp("overview");
@@ -73,6 +78,7 @@ async function handleInit(parsed: ReturnType<typeof parseArgs>): Promise<void> {
   console.log(`Template: ${template}`);
   console.log(`Created: ${createdEntries.join(", ")}`);
   console.log(`Next: edit ${resolvedTargetDir}/SKILL.md`);
+  console.log(`Reference example: ${getExampleSkillForTemplate(template, resources)}`);
   console.log(`Then: openclaw-skillkit lint ${resolvedTargetDir}`);
   console.log(`Ship: openclaw-skillkit pack ${resolvedTargetDir}`);
 }
@@ -82,19 +88,32 @@ async function handleLint(parsed: ReturnType<typeof parseArgs>): Promise<void> {
   assertArgumentCount(parsed, 1, "lint accepts at most 1 target directory.");
 
   const targetDir = parsed.positionals[0] ?? ".";
-  const format = parseLintFormat(parsed);
+  const format = parseMachineFormat(parsed, "lint");
   const exitCode = await runLint(targetDir, { format });
   process.exitCode = exitCode;
 }
 
 async function handlePack(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["output"]);
+  assertNoUnexpectedFlags(parsed, ["output", "format", "json"]);
   assertArgumentCount(parsed, 1, "pack expects exactly 1 target directory.");
 
   const targetDir = parsed.positionals[0] ?? ".";
+  await runPack(targetDir, {
+    outputPath: typeof getFlag(parsed, "output") === "string" ? String(getFlag(parsed, "output")) : undefined,
+    format: parseMachineFormat(parsed, "pack")
+  });
+}
 
-  const output = typeof getFlag(parsed, "output") === "string" ? String(getFlag(parsed, "output")) : undefined;
-  await runPack(targetDir, output);
+async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void> {
+  assertNoUnexpectedFlags(parsed, ["format", "json"]);
+  assertArgumentCount(parsed, 1, "inspect expects exactly 1 archive path.");
+
+  const archivePath = parsed.positionals[0];
+  if (!archivePath) {
+    throw new Error('inspect requires a .skill archive path. Run "openclaw-skillkit help inspect" for examples.');
+  }
+
+  await runInspect(archivePath, { format: parseMachineFormat(parsed, "inspect") });
 }
 
 function assertNoUnexpectedFlags(parsed: ReturnType<typeof parseArgs>, allowed: string[]): void {
@@ -152,13 +171,28 @@ Examples:
 Create a .skill archive after lint passes.
 
   Usage:
-  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill]
+  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit pack
   openclaw-skillkit pack skills/customer-support
   openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support
   openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
+`);
+    return;
+  }
+
+  if (command === "inspect") {
+    console.log(`openclaw-skillkit inspect
+
+Inspect a packaged .skill archive and print the embedded manifest.
+
+Usage:
+  openclaw-skillkit inspect <archive.skill> [--json|--format text|json]
+
+Examples:
+  openclaw-skillkit inspect ./artifacts/customer-support.skill
+  openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 `);
     return;
   }
@@ -170,7 +204,8 @@ Build, lint, and pack OpenClaw skills.
 Usage:
   openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
   openclaw-skillkit lint [dir] [--json|--format text|json]
-  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill]
+  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--json|--format text|json]
 
 Help:
   openclaw-skillkit help
@@ -202,7 +237,7 @@ function parseTemplateMode(value: string | boolean | undefined): TemplateMode {
   throw new Error(`Unknown template mode "${value}". Use one of: ${Object.keys(TEMPLATE_MODES).join(", ")}.`);
 }
 
-function parseLintFormat(parsed: ReturnType<typeof parseArgs>): "text" | "json" {
+function parseMachineFormat(parsed: ReturnType<typeof parseArgs>, commandName: string): "text" | "json" {
   const jsonFlag = getFlag(parsed, "json");
   const formatFlag = getFlag(parsed, "format");
 
@@ -219,14 +254,14 @@ function parseLintFormat(parsed: ReturnType<typeof parseArgs>): "text" | "json" 
   }
 
   if (typeof formatFlag !== "string") {
-    throw new Error('`--format` expects "text" or "json".');
+    throw new Error(`\`--format\` for ${commandName} expects "text" or "json".`);
   }
 
   if (formatFlag === "text" || formatFlag === "json") {
     return formatFlag;
   }
 
-  throw new Error(`Unknown lint format "${formatFlag}". Use "text" or "json".`);
+  throw new Error(`Unknown ${commandName} format "${formatFlag}". Use "text" or "json".`);
 }
 
 function templateResourcesForSummary(template: TemplateMode, resources: string[]): string[] {

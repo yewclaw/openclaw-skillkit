@@ -79,10 +79,15 @@ serialTest("cli init scaffolds a skill with requested resources", async () => {
   assert.match(result.stdout, /Template: minimal/);
   assert.match(result.stdout, /Created: SKILL\.md, references\/, scripts\/, assets\//);
   assert.match(result.stdout, /Next: edit .*SKILL\.md/);
+  assert.match(result.stdout, /Reference example: examples\/weather-research-skill/);
   assert.match(result.stdout, /Then: openclaw-skillkit lint /);
   assert.match(result.stdout, /Ship: openclaw-skillkit pack /);
-  assert.match(await fs.readFile(path.join(targetDir, "SKILL.md"), "utf8"), /name: customer-support/);
-  assert.doesNotMatch(await fs.readFile(path.join(targetDir, "SKILL.md"), "utf8"), /Explain what this skill helps the model do\./);
+  const skillMarkdown = await fs.readFile(path.join(targetDir, "SKILL.md"), "utf8");
+  assert.match(skillMarkdown, /name: customer-support/);
+  assert.match(skillMarkdown, /## Inputs/);
+  assert.match(skillMarkdown, /## Output/);
+  assert.match(skillMarkdown, /## Customization Checklist/);
+  assert.doesNotMatch(skillMarkdown, /Explain what this skill helps the model do\./);
   await fs.access(path.join(targetDir, "references", "README.md"));
   await fs.access(path.join(targetDir, "scripts", "example.sh"));
   await fs.access(path.join(targetDir, "assets", "README.txt"));
@@ -118,6 +123,7 @@ serialTest("cli lint succeeds for a valid fixture", async () => {
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /OK: skill structure looks valid/);
   assert.match(result.stdout, /Ready: openclaw-skillkit pack /);
+  assert.match(result.stdout, /Inspect after packing: openclaw-skillkit inspect /);
 });
 
 serialTest("cli lint fails for an invalid fixture", async () => {
@@ -198,7 +204,9 @@ serialTest("cli pack creates a .skill archive for a valid fixture", async () => 
 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Archive ready: /);
-  assert.match(result.stdout, /Included 4 bundled file\(s\) plus manifest, /);
+  assert.match(result.stdout, /Skill: weather-research@1\.2\.3/);
+  assert.match(result.stdout, /Contents: SKILL\.md, assets\/README\.txt, references\/README\.md, scripts\/example\.sh/);
+  assert.match(result.stdout, /Inspect: openclaw-skillkit inspect /);
   const entries = await readArchiveEntries(outputPath);
   assert.deepEqual(entries.sort(), [
     ".openclaw-skillkit/manifest.json",
@@ -209,11 +217,24 @@ serialTest("cli pack creates a .skill archive for a valid fixture", async () => 
   ]);
   const manifest = JSON.parse(await readArchiveEntry(outputPath, ".openclaw-skillkit/manifest.json"));
   assert.equal(manifest.schemaVersion, 1);
-  assert.deepEqual(manifest.entries, [
+  assert.deepEqual(manifest.skill, {
+    name: "weather-research",
+    description: "Skill for structured weather research with grounded source notes.",
+    version: "1.2.3"
+  });
+  assert.equal(manifest.entryCount, 4);
+  assert.equal(manifest.totalBytes > 0, true);
+  assert.deepEqual(manifest.entries.map((entry) => entry.path), [
     "SKILL.md",
     "assets/README.txt",
     "references/README.md",
     "scripts/example.sh"
+  ]);
+  assert.deepEqual(manifest.entries.map((entry) => typeof entry.size), [
+    "number",
+    "number",
+    "number",
+    "number"
   ]);
 });
 
@@ -265,6 +286,29 @@ serialTest("cli pack appends .skill and creates the output directory when needed
   await fs.access(`${outputPath}.skill`);
 });
 
+serialTest("cli pack supports json output for artifact pipelines", async () => {
+  const tempDir = await makeTempDir("openclaw-pack-json-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+
+  const result = await runCli(["pack", skillDir, "--output", outputPath, "--json"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.archivePath, outputPath);
+  assert.equal(payload.archiveSizeBytes > 0, true);
+  assert.equal(payload.archiveSizeLabel.length > 0, true);
+  assert.deepEqual(payload.warnings, []);
+  assert.equal(payload.manifest.skill.name, "weather-research");
+  assert.deepEqual(payload.manifest.entries.map((entry) => entry.path), [
+    "SKILL.md",
+    "assets/README.txt",
+    "references/README.md",
+    "scripts/example.sh"
+  ]);
+});
+
 serialTest("cli pack excludes nested .skill artifacts from the archive payload", async () => {
   const tempDir = await makeTempDir("openclaw-pack-nested-artifact-");
   const skillDir = path.join(tempDir, "skill");
@@ -297,6 +341,40 @@ serialTest("cli help supports command-specific output", async () => {
   assert.match(result.stdout, /openclaw-skillkit pack/);
   assert.match(result.stdout, /Create a \.skill archive after lint passes\./);
   assert.match(result.stdout, /openclaw-skillkit pack$/m);
+});
+
+serialTest("cli inspect reads the embedded archive manifest", async () => {
+  const tempDir = await makeTempDir("openclaw-inspect-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+  const packResult = await runCli(["pack", skillDir, "--output", outputPath]);
+  assert.equal(packResult.code, 0, packResult.stderr);
+
+  const result = await runCli(["inspect", outputPath]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Inspecting /);
+  assert.match(result.stdout, /Skill: weather-research@1\.2\.3/);
+  assert.match(result.stdout, /Description: Skill for structured weather research/);
+  assert.match(result.stdout, /Contents: SKILL\.md \(\d+ B\), assets\/README\.txt/);
+});
+
+serialTest("cli inspect supports json output", async () => {
+  const tempDir = await makeTempDir("openclaw-inspect-json-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+  const packResult = await runCli(["pack", skillDir, "--output", outputPath]);
+  assert.equal(packResult.code, 0, packResult.stderr);
+
+  const result = await runCli(["inspect", outputPath, "--json"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.archivePath, outputPath);
+  assert.equal(payload.manifest.skill.version, "1.2.3");
+  assert.equal(payload.manifest.entryCount, 4);
 });
 
 serialTest("cli rejects unknown flags with a clear error", async () => {

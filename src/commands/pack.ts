@@ -1,10 +1,15 @@
 import path from "node:path";
 import { stat } from "node:fs/promises";
-import { createSkillArchive } from "../lib/zip";
+import { createSkillArchive, type SkillArchiveManifest } from "../lib/zip";
 import { ensureDir, exists } from "../lib/fs";
 import { lintSkill } from "../lib/skill";
 
-export async function runPack(targetDir: string, outputPath?: string): Promise<void> {
+export interface RunPackOptions {
+  outputPath?: string;
+  format: "text" | "json";
+}
+
+export async function runPack(targetDir: string, options: RunPackOptions): Promise<void> {
   const resolvedDir = path.resolve(targetDir);
   const lintResult = await lintSkill(resolvedDir);
   const errors = lintResult.issues.filter((issue) => issue.level === "error");
@@ -14,7 +19,7 @@ export async function runPack(targetDir: string, outputPath?: string): Promise<v
     throw new Error(`Cannot pack ${resolvedDir} because lint found ${errors.length} error(s).`);
   }
 
-  const { destination, normalizedOutputPath } = resolveDestination(resolvedDir, outputPath);
+  const { destination, normalizedOutputPath } = resolveDestination(resolvedDir, options.outputPath);
 
   if (await exists(destination)) {
     throw new Error(`Output already exists: ${destination}`);
@@ -22,9 +27,11 @@ export async function runPack(targetDir: string, outputPath?: string): Promise<v
 
   await ensureDir(path.dirname(destination));
 
-  console.log(`Packing ${resolvedDir}`);
+  if (options.format === "text") {
+    console.log(`Packing ${resolvedDir}`);
+  }
 
-  if (warnings.length > 0) {
+  if (warnings.length > 0 && options.format === "text") {
     console.log(`Packing with ${warnings.length} warning(s):`);
     for (const warning of warnings) {
       console.log(`  WARNING [${warning.file}]: ${warning.message}`);
@@ -38,12 +45,34 @@ export async function runPack(targetDir: string, outputPath?: string): Promise<v
   const archive = await createSkillArchive(resolvedDir, destination);
   const archiveStat = await stat(destination);
 
-  if (normalizedOutputPath) {
+  if (normalizedOutputPath && options.format === "text") {
     console.log(`Output path did not end in .skill. Using ${destination}`);
   }
 
-  console.log(`Archive ready: ${destination}`);
-  console.log(`  Included ${archive.packagedEntries.length} bundled file(s) plus manifest, ${formatBytes(archiveStat.size)}.`);
+  if (options.format === "json") {
+    console.log(
+      JSON.stringify(
+        {
+          archivePath: destination,
+          normalizedOutputPath,
+          archiveSizeBytes: archiveStat.size,
+          archiveSizeLabel: formatBytes(archiveStat.size),
+          warnings: warnings.map((warning) => ({
+            code: warning.code,
+            file: warning.file,
+            message: warning.message,
+            suggestion: warning.suggestion
+          })),
+          manifest: archive.manifest
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  printArchiveSummary(destination, archiveStat.size, archive.manifest);
 }
 
 function resolveDestination(
@@ -83,4 +112,13 @@ function formatBytes(size: number): string {
   }
 
   return `${(size / 1024).toFixed(1)} KB`;
+}
+
+function printArchiveSummary(destination: string, archiveSize: number, manifest: SkillArchiveManifest): void {
+  console.log(`Archive ready: ${destination}`);
+  console.log(
+    `  Skill: ${manifest.skill.name}@${manifest.skill.version} (${manifest.entryCount} bundled file(s) plus manifest, ${formatBytes(archiveSize)}).`
+  );
+  console.log(`  Contents: ${manifest.entries.map((entry) => entry.path).join(", ")}`);
+  console.log(`  Inspect: openclaw-skillkit inspect ${destination}`);
 }

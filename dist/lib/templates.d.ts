@@ -1,0 +1,11 @@
+export declare const DEFAULT_SKILL_MD = "---\nname: {{name}}\ndescription: {{description}}\nversion: 0.1.0\n---\n\n# {{title}}\n\n## Purpose\nHelp the model execute {{title}} work with a predictable, reviewable workflow.\n\n## Use When\n- The user needs {{titleLower}} help with a clear outcome.\n- The task benefits from a repeatable sequence instead of free-form improvisation.\n\n## Inputs\n- The user's goal, constraints, and required output format.\n- Any local references, policies, examples, or helper scripts that should shape the result.\n\n## Workflow\n1. Confirm the user's goal, required inputs, and any missing context.\n2. Gather the minimum information needed to complete the task reliably.\n3. Produce the result in a concise format that is easy to review.\n\n## Output\n- Return the final result in the format the user asked for.\n- Call out any missing inputs, assumptions, or follow-up actions.\n\n## Constraints\n- Ask for clarification when required inputs are missing.\n- Prefer verifiable information over assumptions.\n- Keep the output focused on the user's requested outcome.\n\n## Customization Checklist\n1. Replace this scaffold text with domain-specific steps, checks, and language.\n2. Add local links under `references/`, `scripts/`, or `assets/` when they improve repeatability.\n3. Run `openclaw-skillkit lint .` before packaging the skill.\n";
+export declare const TEMPLATE_MODES: {
+    readonly minimal: readonly [];
+    readonly references: readonly ["references"];
+    readonly scripts: readonly ["references", "scripts"];
+    readonly full: readonly ["references", "scripts", "assets"];
+};
+export type TemplateMode = keyof typeof TEMPLATE_MODES;
+export declare const EXAMPLE_REFERENCE = "# Notes\n\nStore short supporting docs here that the skill can cite, summarize, or follow.\nGood examples: API quirks, policy notes, output rubrics, or edge-case checklists.\n";
+export declare const EXAMPLE_SCRIPT = "#!/usr/bin/env bash\nset -euo pipefail\n\nif [ \"$#\" -eq 0 ]; then\n  echo \"usage: ./scripts/example.sh <input>\" >&2\n  exit 1\nfi\n\nprintf 'todo: replace with a real workflow for \"%s\"\n' \"$1\"\n";
+export declare const EXAMPLE_ASSET = "Use this folder for reusable templates, prompts, or example outputs that support the skill.";

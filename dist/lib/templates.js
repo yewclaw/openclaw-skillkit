@@ -16,15 +16,28 @@ Help the model execute {{title}} work with a predictable, reviewable workflow.
 - The user needs {{titleLower}} help with a clear outcome.
 - The task benefits from a repeatable sequence instead of free-form improvisation.
 
+## Inputs
+- The user's goal, constraints, and required output format.
+- Any local references, policies, examples, or helper scripts that should shape the result.
+
 ## Workflow
 1. Confirm the user's goal, required inputs, and any missing context.
 2. Gather the minimum information needed to complete the task reliably.
 3. Produce the result in a concise format that is easy to review.
 
+## Output
+- Return the final result in the format the user asked for.
+- Call out any missing inputs, assumptions, or follow-up actions.
+
 ## Constraints
 - Ask for clarification when required inputs are missing.
 - Prefer verifiable information over assumptions.
 - Keep the output focused on the user's requested outcome.
+
+## Customization Checklist
+1. Replace this scaffold text with domain-specific steps, checks, and language.
+2. Add local links under \`references/\`, \`scripts/\`, or \`assets/\` when they improve repeatability.
+3. Run \`openclaw-skillkit lint .\` before packaging the skill.
 `;
 exports.TEMPLATE_MODES = {
     minimal: [],

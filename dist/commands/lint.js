@@ -1,10 +1,13 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runLint = runLint;
-const path = require("node:path");
+const node_path_1 = __importDefault(require("node:path"));
 const skill_1 = require("../lib/skill");
 async function runLint(targetDir, options) {
-    const resolved = path.resolve(targetDir);
+    const resolved = node_path_1.default.resolve(targetDir);
     const result = await (0, skill_1.lintSkill)(resolved);
     const summary = summarize(result);
     const actionPlan = buildActionPlan(result, resolved);
@@ -23,6 +26,7 @@ async function runLint(targetDir, options) {
     if (summary.total === 0) {
         console.log(`  OK: skill structure looks valid (${result.fileCount} file(s) checked).`);
         console.log(`  Ready: openclaw-skillkit pack ${resolved}`);
+        console.log(`  Inspect after packing: openclaw-skillkit inspect ${resolved}.skill`);
         return 0;
     }
     for (const issue of result.issues) {
