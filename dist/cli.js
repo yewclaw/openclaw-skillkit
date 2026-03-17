@@ -122,14 +122,24 @@ async function handleInspect(parsed) {
     });
 }
 async function handleReview(parsed) {
-    assertNoUnexpectedFlags(parsed, ["output", "format", "json", "report", "against"]);
+    assertNoUnexpectedFlags(parsed, ["output", "output-dir", "format", "json", "report", "against", "all", "baseline-dir"]);
     assertArgumentCount(parsed, 1, "review accepts at most 1 target directory.");
     const targetDir = parsed.positionals[0] ?? ".";
+    const batchMode = (0, args_1.getFlag)(parsed, "all") === true;
+    if (batchMode && typeof (0, args_1.getFlag)(parsed, "output") === "string") {
+        throw new Error('review --all does not support --output. Use --output-dir to control where batch artifacts are written.');
+    }
+    if (batchMode && typeof (0, args_1.getFlag)(parsed, "against") === "string") {
+        throw new Error('review --all does not support --against. Use --baseline-dir to match each skill against a baseline archive directory.');
+    }
     const exitCode = await (0, review_1.runReview)(targetDir, {
         outputPath: typeof (0, args_1.getFlag)(parsed, "output") === "string" ? String((0, args_1.getFlag)(parsed, "output")) : undefined,
+        outputDir: typeof (0, args_1.getFlag)(parsed, "output-dir") === "string" ? String((0, args_1.getFlag)(parsed, "output-dir")) : undefined,
         format: parseMachineFormat(parsed, "review"),
         reportPath: parseOptionalPathFlag(parsed, "report"),
-        baselineArchivePath: typeof (0, args_1.getFlag)(parsed, "against") === "string" ? String((0, args_1.getFlag)(parsed, "against")) : undefined
+        baselineArchivePath: typeof (0, args_1.getFlag)(parsed, "against") === "string" ? String((0, args_1.getFlag)(parsed, "against")) : undefined,
+        baselineDir: typeof (0, args_1.getFlag)(parsed, "baseline-dir") === "string" ? String((0, args_1.getFlag)(parsed, "baseline-dir")) : undefined,
+        all: batchMode
     });
     process.exitCode = exitCode;
 }
@@ -238,12 +248,16 @@ Run a release-readiness review for a skill directory.
 
 Usage:
   openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
+  openclaw-skillkit review [dir] --all [--output-dir ./.openclaw-skillkit/review-artifacts] [--baseline-dir ./released-skills] [--report [./reports/review-all.report.md]] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit review
   openclaw-skillkit review skills/customer-support
   openclaw-skillkit review skills/customer-support --against ./artifacts/customer-support-prev.skill
   openclaw-skillkit review skills/customer-support --output ./artifacts/customer-support.skill --report
+  openclaw-skillkit review skills --all
+  openclaw-skillkit review skills --all --output-dir ./artifacts/review
+  openclaw-skillkit review skills --all --baseline-dir ./released-skills --report
   openclaw-skillkit review skills/customer-support --json
 `);
         return;
@@ -272,7 +286,7 @@ Usage:
   openclaw-skillkit lint [dir] [--all] [--report [./reports/lint-all.report.md]] [--json|--format text|json]
   openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
-  openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
+  openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.openclaw-skillkit/review-artifacts] [--baseline-dir ./released-skills] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
   openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
 
 Help:

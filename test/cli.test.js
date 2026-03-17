@@ -449,6 +449,8 @@ serialTest("cli help documents the review workflow", async () => {
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /openclaw-skillkit review/);
   assert.match(result.stdout, /release-readiness review/);
+  assert.match(result.stdout, /--all/);
+  assert.match(result.stdout, /--baseline-dir \.\/released-skills/);
   assert.match(result.stdout, /my-skill\.review\.md/);
 });
 
@@ -674,6 +676,82 @@ serialTest("cli review stops before packaging when the skill is not ready", asyn
   assert.equal(payload.releaseSummary.headline, "Not ready to ship");
   assert.equal(payload.archive, undefined);
   await assert.rejects(fs.access(outputPath));
+});
+
+serialTest("cli review --all runs repo-scale readiness checks and writes batch artifacts", async () => {
+  const tempDir = await makeTempDir("openclaw-review-all-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const artifactsDir = path.join(tempDir, "review-artifacts");
+  const reportPath = path.join(tempDir, "review-all.md");
+  await copyFixture(path.join("valid", "basic-skill"), path.join(skillsRoot, "weather"));
+  await copyFixture(path.join("invalid", "bad-version-skill"), path.join(skillsRoot, "broken"));
+
+  const result = await runCli(["review", skillsRoot, "--all", "--output-dir", artifactsDir, "--report", reportPath, "--json"]);
+
+  assert.equal(result.code, 1);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.rootDir, skillsRoot);
+  assert.equal(payload.skillCount, 2);
+  assert.equal(payload.summary.ready, 1);
+  assert.equal(payload.summary.notReady, 1);
+  assert.equal(payload.summary.archiveDrift, 0);
+  assert.match(payload.reportMarkdown, /# OpenClaw Skill Batch Review Report/);
+  assert.deepEqual(
+    payload.skills.map((entry) => entry.relativeDir).sort(),
+    ["broken", "weather"]
+  );
+  const weather = payload.skills.find((entry) => entry.relativeDir === "weather");
+  const broken = payload.skills.find((entry) => entry.relativeDir === "broken");
+  assert.equal(weather.readiness, "ready");
+  assert.match(weather.archive.destination, /weather\.skill$/);
+  assert.equal(broken.readiness, "not-ready");
+  assert.equal(broken.archive, undefined);
+  await fs.access(path.join(artifactsDir, "weather.skill"));
+  const report = await fs.readFile(reportPath, "utf8");
+  assert.match(report, /### weather/);
+  assert.match(report, /### broken/);
+});
+
+serialTest("cli review --all can match baseline archives from a directory", async () => {
+  const tempDir = await makeTempDir("openclaw-review-all-baseline-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const baselinesDir = path.join(tempDir, "baselines");
+  const artifactsDir = path.join(tempDir, "artifacts");
+  const weatherDir = path.join(skillsRoot, "weather");
+  await copyFixture(path.join("valid", "basic-skill"), weatherDir);
+  await fs.mkdir(baselinesDir, { recursive: true });
+
+  let result = await runCli(["pack", weatherDir, "--output", path.join(baselinesDir, "weather-research.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+
+  await fs.appendFile(path.join(weatherDir, "references", "README.md"), "\nChanged after baseline.\n");
+
+  result = await runCli([
+    "review",
+    skillsRoot,
+    "--all",
+    "--output-dir",
+    artifactsDir,
+    "--baseline-dir",
+    baselinesDir,
+    "--json"
+  ]);
+
+  assert.equal(result.code, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.summary.baselineCompared, 1);
+  assert.equal(payload.summary.releaseChanged, 1);
+  assert.equal(payload.summary.baselineMissing, 0);
+  const weather = payload.skills.find((entry) => entry.relativeDir === "weather");
+  assert.match(weather.baselineLookup.resolvedArchivePath, /weather-research\.skill$/);
+  assert.equal(weather.archive.releaseComparison.matches, false);
+});
+
+serialTest("cli review --all rejects single-skill artifact flags", async () => {
+  const result = await runCli(["review", ".", "--all", "--output", "./artifact.skill"]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /review --all does not support --output/);
 });
 
 serialTest("cli rejects unknown flags with a clear error", async () => {
