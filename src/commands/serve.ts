@@ -374,16 +374,16 @@ const HTML_PAGE = String.raw`<!doctype html>
           <form id="init-form" class="stack">
             <label>
               <span>Target directory</span>
-              <input name="targetDir" placeholder="./skills/customer-support" required />
+              <input name="targetDir" id="init-target-dir" placeholder="./skills/customer-support" required />
               <small>Create a new skill folder or point at an existing draft you want to re-scaffold.</small>
             </label>
             <label>
               <span>Skill name</span>
-              <input name="name" placeholder="customer-support" />
+              <input name="name" id="init-name" placeholder="customer-support" />
             </label>
             <label>
               <span>Description</span>
-              <textarea name="description" rows="3" placeholder="Skill for support triage workflows"></textarea>
+              <textarea name="description" id="init-description" rows="3" placeholder="Skill for support triage workflows"></textarea>
             </label>
             <label>
               <span>Template</span>
@@ -726,6 +726,30 @@ small {
   font-size: 0.8rem;
 }
 
+.example-notes {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.example-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.command-card {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(23, 32, 25, 0.06);
+  overflow: auto;
+}
+
+.command-card code {
+  color: var(--text);
+}
+
 .stack {
   display: grid;
   gap: 14px;
@@ -874,6 +898,9 @@ const exampleList = document.querySelector("#example-list");
 const cwdLabel = document.querySelector("#cwd");
 const templateSelect = document.querySelector("#template-select");
 const initForm = document.querySelector("#init-form");
+const initTargetDirInput = document.querySelector("#init-target-dir");
+const initNameInput = document.querySelector("#init-name");
+const initDescriptionInput = document.querySelector("#init-description");
 const lintForm = document.querySelector("#lint-form");
 const inspectForm = document.querySelector("#inspect-form");
 const skillDirInput = document.querySelector("#skill-dir-input");
@@ -912,14 +939,24 @@ function renderExamples() {
   }
 
   exampleList.innerHTML = state.examples.map((example) => {
-    const pills = example.resources.map((resource) => '<span class="pill">' + resource + '</span>').join("");
+    const pills = ['<span class="pill">template: ' + escapeHtml(example.recommendedTemplate) + "</span>"]
+      .concat(example.resources.map((resource) => '<span class="pill">' + resource + '</span>'))
+      .join("");
+    const bestFor = example.useCases[0] || example.description || "Adapt this pattern to a similar workflow.";
+    const workflowPreview = example.workflowPreview || "Review the example workflow and adapt its first step.";
 
     return '<article class="example-card">' +
-      '<div class="card-title"><strong>' + escapeHtml(example.name) + '</strong><span class="pill">v' + escapeHtml(example.version || "n/a") + '</span></div>' +
+      '<div class="card-title"><strong>' + escapeHtml(example.title) + '</strong><span class="pill">v' + escapeHtml(example.version || "n/a") + '</span></div>' +
       '<p>' + escapeHtml(example.description || "No description") + '</p>' +
       '<p><code>' + escapeHtml(example.relativePath) + '</code></p>' +
-      '<div class="pill-row" style="margin: 12px 0 14px;">' + pills + '</div>' +
+      '<div class="pill-row" style="margin: 12px 0 0;">' + pills + '</div>' +
+      '<div class="example-notes">' +
+      '<p class="example-note"><strong>Best for:</strong> ' + escapeHtml(bestFor) + '</p>' +
+      '<p class="example-note"><strong>Workflow starts:</strong> ' + escapeHtml(workflowPreview) + '</p>' +
+      '<p class="command-card"><code>' + escapeHtml(example.starterCommand) + '</code></p>' +
+      "</div>" +
       '<div class="button-row">' +
+      '<button type="button" class="secondary" data-prefill-example="' + escapeHtml(example.name) + '">Prefill create form</button>' +
       '<button type="button" data-use-path="' + escapeHtml(example.absolutePath) + '">Use skill</button>' +
       '<button type="button" class="secondary" data-use-archive="' + escapeHtml(example.absolutePath + ".skill") + '" data-source-path="' + escapeHtml(example.absolutePath) + '">Use archive path</button>' +
       "</div>" +
@@ -942,6 +979,27 @@ function renderExamples() {
       archivePathInput.value = value;
       inspectSourceInput.value = button.getAttribute("data-source-path") || inspectSourceInput.value;
       setStatus("Archive path loaded", "The inspect form is prefilled with an example archive path.", "ok");
+    });
+  }
+
+  for (const button of exampleList.querySelectorAll("[data-prefill-example]")) {
+    button.addEventListener("click", () => {
+      const name = button.getAttribute("data-prefill-example");
+      const example = state.examples.find((entry) => entry.name === name);
+      if (!example) {
+        return;
+      }
+
+      initTargetDirInput.value = example.suggestedTargetDir;
+      initNameInput.value = example.name;
+      initDescriptionInput.value = example.description || "";
+      templateSelect.value = example.recommendedTemplate;
+      setResourceSelections([]);
+      setStatus(
+        "Create form prefilled",
+        "The init form now mirrors this example's structure so you can scaffold a first draft without copying paths by hand.",
+        "ok"
+      );
     });
   }
 }
@@ -1323,6 +1381,12 @@ function setBusy(button, isBusy) {
   }
 
   button.textContent = isBusy ? "Working..." : button.dataset.label;
+}
+
+function setResourceSelections(resources) {
+  for (const input of initForm.querySelectorAll('input[name="resources"]')) {
+    input.checked = resources.includes(input.value);
+  }
 }
 
 function escapeHtml(value) {

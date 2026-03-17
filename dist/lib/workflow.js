@@ -25,6 +25,7 @@ const promises_1 = require("node:fs/promises");
 const fs_1 = require("./fs");
 const frontmatter_1 = require("./frontmatter");
 const skill_1 = require("./skill");
+const templates_1 = require("./templates");
 const zip_1 = require("./zip");
 function summarizeLintResult(result) {
     const errors = result.issues.filter((issue) => issue.level === "error").length;
@@ -403,21 +404,71 @@ async function listExampleSkills(repoRoot = node_path_1.default.resolve(__dirnam
         const markdown = await (0, fs_1.readTextFile)(skillFile);
         const parsed = (0, frontmatter_1.parseFrontmatter)(markdown);
         const resources = [];
+        const title = extractFirstHeading(parsed.body) ?? entry.name;
+        const useCases = extractMarkdownBullets(extractMarkdownSection(parsed.body, "Use When"));
+        const workflowSteps = extractMarkdownNumberedSteps(extractMarkdownSection(parsed.body, "Workflow"));
         for (const resource of ["references", "scripts", "assets"]) {
             if (await (0, fs_1.exists)(node_path_1.default.join(skillDir, resource))) {
                 resources.push(resource);
             }
         }
+        const recommendedTemplate = inferTemplateMode(resources);
         results.push({
             name: parsed.attributes.name ?? entry.name,
             absolutePath: skillDir,
             relativePath: node_path_1.default.relative(repoRoot, skillDir),
+            title,
             description: parsed.attributes.description ?? "",
             version: parsed.attributes.version ?? "",
-            resources
+            resources,
+            recommendedTemplate,
+            suggestedTargetDir: `./skills/${parsed.attributes.name ?? entry.name}`,
+            starterCommand: `openclaw-skillkit init ./skills/${parsed.attributes.name ?? entry.name} --template ${recommendedTemplate}`,
+            useCases,
+            workflowSteps,
+            workflowPreview: workflowSteps[0] ?? "Review the example and adapt its workflow to your own domain."
         });
     }
     return results.sort((left, right) => left.name.localeCompare(right.name));
+}
+function extractFirstHeading(markdownBody) {
+    const match = markdownBody.match(/^#\s+(.+)$/m);
+    return match?.[1]?.trim();
+}
+function extractMarkdownSection(markdownBody, heading) {
+    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = markdownBody.match(new RegExp(`^##\\s+${escapedHeading}\\s*$([\\s\\S]*?)(?=^##\\s+|\\Z)`, "m"));
+    return match?.[1]?.trim() ?? "";
+}
+function extractMarkdownBullets(section) {
+    return section
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => /^-\s+/.test(line))
+        .map((line) => line.replace(/^-\s+/, "").trim());
+}
+function extractMarkdownNumberedSteps(section) {
+    return section
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => /^\d+\.\s+/.test(line))
+        .map((line) => line.replace(/^\d+\.\s+/, "").trim());
+}
+function inferTemplateMode(resources) {
+    const normalizedResources = [...resources].sort();
+    for (const [template, templateResources] of Object.entries(templates_1.TEMPLATE_MODES)) {
+        if (templateResources.length === normalizedResources.length &&
+            templateResources.every((resource, index) => normalizedResources[index] === resource)) {
+            return template;
+        }
+    }
+    return normalizedResources.includes("assets")
+        ? "full"
+        : normalizedResources.includes("scripts")
+            ? "scripts"
+            : normalizedResources.includes("references")
+                ? "references"
+                : "minimal";
 }
 const CATEGORY_GUIDANCE = {
     filesystem: {

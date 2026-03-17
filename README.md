@@ -94,12 +94,13 @@ Skill Studio is designed to feel like the product surface for the toolkit, not a
 - start from an example or scaffold a new skill
 - see the current workflow status at a glance
 - get clearer empty states and recommended next actions after each operation
+- prefill a new skill scaffold from a checked-in example's structure and metadata
 - move directly from packaging into archive inspection without re-entering paths
 
 Use it to:
 
 - scaffold a new skill with template and resource options
-- load example skills as starting points
+- compare examples, preload their paths, and prefill a matching scaffold
 - lint a local skill directory and review fix guidance
 - package a `.skill` archive and inspect the bundled manifest
 - run one release-readiness review that combines lint, packaging, and artifact verification
@@ -147,6 +148,15 @@ skills/customer-support/
 ```
 
 The generated `SKILL.md` now includes practical sections for `Inputs`, `Output`, and a short customization checklist so authors can move from scaffold to reviewable skill with fewer guesswork edits.
+
+If you are not sure where to start, use the examples as authoring blueprints instead of copying folders manually:
+
+```bash
+openclaw-skillkit init ./skills/weather-research-skill --template scripts
+openclaw-skillkit init ./skills/customer-support-triage-skill --template references
+```
+
+Skill Studio now surfaces the same adaptation path directly in each example card, including a prefilled create form, the recommended template, and the first workflow step to borrow.
 
 ### 2. Catch trust-breaking issues early
 

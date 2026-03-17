@@ -16,6 +16,7 @@ test("studio assets expose the local app shell and workflow controls", () => {
   assert.match(assets.html, /One Clear Skill Pipeline/);
   assert.match(assets.html, /id="status-title"/);
   assert.match(assets.html, /id="init-form"/);
+  assert.match(assets.html, /id="init-target-dir"/);
   assert.match(assets.html, /id="inspect-form"/);
   assert.match(assets.html, /id="inspect-source-input"/);
   assert.match(assets.html, /id="review-button"/);
@@ -25,12 +26,15 @@ test("studio assets expose the local app shell and workflow controls", () => {
   assert.match(assets.css, /\.step-grid/);
   assert.match(assets.css, /\.status-banner/);
   assert.match(assets.css, /\.panel/);
+  assert.match(assets.css, /\.command-card/);
   assert.match(assets.js, /api\("\/api\/lint"/);
   assert.match(assets.js, /api\("\/api\/review"/);
   assert.match(assets.js, /formatPackResult/);
   assert.match(assets.js, /formatReviewResult/);
   assert.match(assets.js, /compareArchiveToSource|source comparison/i);
   assert.match(assets.js, /Release report:/);
+  assert.match(assets.js, /Prefill create form/);
+  assert.match(assets.js, /setResourceSelections/);
   assert.match(assets.js, /setStatus\("Ready to author"/);
   assert.match(assets.js, /PACKAGED SUCCESSFULLY/);
   assert.match(assets.js, /Next steps:/);
@@ -42,6 +46,11 @@ test("workflow helpers surface example skills for the studio", async () => {
   assert.equal(examples.length >= 3, true);
   assert.equal(examples.some((example) => example.name === "weather-research-skill"), true);
   assert.equal(examples.some((example) => example.resources.includes("scripts")), true);
+  const weatherExample = examples.find((example) => example.name === "weather-research-skill");
+  assert.equal(weatherExample.recommendedTemplate, "scripts");
+  assert.match(weatherExample.starterCommand, /openclaw-skillkit init \.\/skills\/weather-research-skill --template scripts/);
+  assert.equal(weatherExample.useCases.length > 0, true);
+  assert.equal(weatherExample.workflowSteps.length > 0, true);
 });
 
 test("workflow helpers can pack and inspect a scaffolded studio skill", async () => {

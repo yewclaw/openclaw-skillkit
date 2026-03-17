@@ -1,4 +1,5 @@
 import { type LintResult } from "./skill";
+import { type TemplateMode } from "./templates";
 import { type SkillArchiveManifest } from "./zip";
 export interface LintSummary {
     total: number;
@@ -16,9 +17,16 @@ export interface ExampleSkillSummary {
     name: string;
     absolutePath: string;
     relativePath: string;
+    title: string;
     description: string;
     version: string;
     resources: string[];
+    recommendedTemplate: TemplateMode;
+    suggestedTargetDir: string;
+    starterCommand: string;
+    useCases: string[];
+    workflowSteps: string[];
+    workflowPreview: string;
 }
 export interface PackSkillResult {
     resolvedDir: string;
