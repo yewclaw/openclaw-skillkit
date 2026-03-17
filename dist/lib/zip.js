@@ -6,8 +6,18 @@ const path = require("node:path");
 const promises_2 = require("node:fs/promises");
 const fs_1 = require("./fs");
 const crcTable = createCrcTable();
+const PACK_MANIFEST_PATH = ".openclaw-skillkit/manifest.json";
 async function createSkillArchive(sourceDir, destinationFile) {
-    const files = await (0, fs_1.listFilesRecursive)(sourceDir);
+    const files = (await (0, fs_1.listFilesRecursive)(sourceDir))
+        .filter((file) => !file.relativePath.endsWith(".skill"))
+        .sort(compareArchiveEntries);
+    const packagedEntries = files.map((file) => normalizeArchivePath(file.relativePath));
+    const manifestBuffer = Buffer.from(JSON.stringify({
+        schemaVersion: 1,
+        packagedAt: new Date().toISOString(),
+        sourceDir: path.basename(sourceDir),
+        entries: packagedEntries
+    }, null, 2), "utf8");
     const chunks = [];
     const entries = [];
     let offset = 0;
@@ -26,6 +36,7 @@ async function createSkillArchive(sourceDir, destinationFile) {
             offset: headerOffset
         });
     }
+    offset = appendEntry(chunks, entries, offset, PACK_MANIFEST_PATH, manifestBuffer);
     const centralDirectoryStart = offset;
     for (const entry of entries) {
         const centralHeader = makeCentralDirectoryHeader(entry.name, entry.crc32, entry.data.length, entry.offset);
@@ -35,7 +46,19 @@ async function createSkillArchive(sourceDir, destinationFile) {
     const centralDirectorySize = offset - centralDirectoryStart;
     chunks.push(makeEndOfCentralDirectoryRecord(entries.length, centralDirectorySize, centralDirectoryStart));
     await (0, promises_2.writeFile)(destinationFile, Buffer.concat(chunks));
-    return entries.length;
+    return {
+        fileCount: entries.length,
+        packagedEntries
+    };
+}
+function compareArchiveEntries(left, right) {
+    if (left.relativePath === "SKILL.md") {
+        return right.relativePath === "SKILL.md" ? 0 : -1;
+    }
+    if (right.relativePath === "SKILL.md") {
+        return 1;
+    }
+    return left.relativePath.localeCompare(right.relativePath);
 }
 function normalizeArchivePath(relativePath) {
     return relativePath.split(path.sep).join("/");
@@ -56,6 +79,19 @@ function makeLocalFileHeader(name, crc32, size) {
     header.writeUInt16LE(0, 28);
     nameBuffer.copy(header, 30);
     return header;
+}
+function appendEntry(chunks, entries, offset, name, data) {
+    const crc32 = crc32Buffer(data);
+    const localHeader = makeLocalFileHeader(name, crc32, data.length);
+    const headerOffset = offset;
+    chunks.push(localHeader, data);
+    entries.push({
+        name,
+        data,
+        crc32,
+        offset: headerOffset
+    });
+    return offset + localHeader.length + data.length;
 }
 function makeCentralDirectoryHeader(name, crc32, size, offset) {
     const nameBuffer = Buffer.from(name, "utf8");

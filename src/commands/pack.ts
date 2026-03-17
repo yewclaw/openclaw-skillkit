@@ -35,7 +35,7 @@ export async function runPack(targetDir: string, outputPath?: string): Promise<v
     console.log("Proceeding anyway because warnings do not block packaging.");
   }
 
-  const fileCount = await createSkillArchive(resolvedDir, destination);
+  const archive = await createSkillArchive(resolvedDir, destination);
   const archiveStat = await stat(destination);
 
   if (normalizedOutputPath) {
@@ -43,7 +43,7 @@ export async function runPack(targetDir: string, outputPath?: string): Promise<v
   }
 
   console.log(`Archive ready: ${destination}`);
-  console.log(`  Included ${fileCount} file(s), ${formatBytes(archiveStat.size)}.`);
+  console.log(`  Included ${archive.packagedEntries.length} bundled file(s) plus manifest, ${formatBytes(archiveStat.size)}.`);
 }
 
 function resolveDestination(

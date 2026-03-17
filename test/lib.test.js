@@ -101,6 +101,67 @@ test("lintSkill detects missing local markdown references", async () => {
   );
 });
 
+test("lintSkill rejects local references that escape the skill root", async () => {
+  const skillDir = await makeTempDir("openclaw-reference-escape-");
+  const outsideReference = path.join(path.dirname(skillDir), "outside.md");
+  await fs.writeFile(outsideReference, "# Not bundled\n");
+  await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
+name: escaped-reference-check
+description: Skill for catching local references that packaging cannot safely bundle.
+version: 1.0.0
+---
+
+# Escaped Reference Check
+
+## Purpose
+Keep local references self-contained.
+
+## Workflow
+1. Review the local guide at [Outside](../${path.basename(outsideReference)}).
+2. Summarize the required steps.
+
+## Constraints
+- Only link to bundled files.
+`);
+
+  const result = await lintSkill(skillDir);
+
+  assert.match(
+    result.issues.map((issue) => issue.message).join("\n"),
+    /Referenced local file escapes the skill root/
+  );
+});
+
+test("lintSkill rejects local references that point to directories", async () => {
+  const skillDir = await makeTempDir("openclaw-reference-directory-");
+  await fs.mkdir(path.join(skillDir, "references"), { recursive: true });
+  await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
+name: directory-reference-check
+description: Skill for catching local references that point at directories instead of bundled files.
+version: 1.0.0
+---
+
+# Directory Reference Check
+
+## Purpose
+Keep links precise.
+
+## Workflow
+1. Review the local guide at [References](references/).
+2. Continue the task.
+
+## Constraints
+- Link to concrete files only.
+`);
+
+  const result = await lintSkill(skillDir);
+
+  assert.match(
+    result.issues.map((issue) => issue.message).join("\n"),
+    /Referenced local path is a directory: references\//
+  );
+});
+
 test("lintSkill warns on placeholder descriptions", async () => {
   const skillDir = path.resolve(__dirname, "fixtures", "benchmark", "bad", "placeholder-description-skill");
   const result = await lintSkill(skillDir);

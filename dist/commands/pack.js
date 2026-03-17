@@ -30,13 +30,13 @@ async function runPack(targetDir, outputPath) {
         }
         console.log("Proceeding anyway because warnings do not block packaging.");
     }
-    const fileCount = await (0, zip_1.createSkillArchive)(resolvedDir, destination);
+    const archive = await (0, zip_1.createSkillArchive)(resolvedDir, destination);
     const archiveStat = await (0, promises_1.stat)(destination);
     if (normalizedOutputPath) {
         console.log(`Output path did not end in .skill. Using ${destination}`);
     }
     console.log(`Archive ready: ${destination}`);
-    console.log(`  Included ${fileCount} file(s), ${formatBytes(archiveStat.size)}.`);
+    console.log(`  Included ${archive.packagedEntries.length} bundled file(s) plus manifest, ${formatBytes(archiveStat.size)}.`);
 }
 function resolveDestination(resolvedDir, outputPath) {
     if (!outputPath) {

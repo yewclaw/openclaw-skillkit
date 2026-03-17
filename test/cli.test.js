@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 
-const { copyFixture, makeTempDir, readArchiveEntries } = require("./helpers/fixture.js");
+const { copyFixture, makeTempDir, readArchiveEntries, readArchiveEntry } = require("./helpers/fixture.js");
 const { main } = require("../dist/cli.js");
 
 const serialTest = (name, fn) => test(name, { concurrency: false }, fn);
@@ -198,9 +198,18 @@ serialTest("cli pack creates a .skill archive for a valid fixture", async () => 
 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Archive ready: /);
-  assert.match(result.stdout, /Included 4 file\(s\), /);
+  assert.match(result.stdout, /Included 4 bundled file\(s\) plus manifest, /);
   const entries = await readArchiveEntries(outputPath);
   assert.deepEqual(entries.sort(), [
+    ".openclaw-skillkit/manifest.json",
+    "SKILL.md",
+    "assets/README.txt",
+    "references/README.md",
+    "scripts/example.sh"
+  ]);
+  const manifest = JSON.parse(await readArchiveEntry(outputPath, ".openclaw-skillkit/manifest.json"));
+  assert.equal(manifest.schemaVersion, 1);
+  assert.deepEqual(manifest.entries, [
     "SKILL.md",
     "assets/README.txt",
     "references/README.md",
@@ -254,6 +263,20 @@ serialTest("cli pack appends .skill and creates the output directory when needed
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Output path did not end in \.skill\. Using /);
   await fs.access(`${outputPath}.skill`);
+});
+
+serialTest("cli pack excludes nested .skill artifacts from the archive payload", async () => {
+  const tempDir = await makeTempDir("openclaw-pack-nested-artifact-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+  await fs.writeFile(path.join(skillDir, "old-release.skill"), "stale artifact");
+
+  const result = await runCli(["pack", skillDir, "--output", outputPath]);
+
+  assert.equal(result.code, 0, result.stderr);
+  const entries = await readArchiveEntries(outputPath);
+  assert.doesNotMatch(entries.join("\n"), /old-release\.skill/);
 });
 
 serialTest("cli pack rejects unsupported output extensions", async () => {

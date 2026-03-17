@@ -99,13 +99,30 @@ async function lintSkill(skillDir) {
     }
     for (const reference of getReferencedLocalFiles(frontmatterBody)) {
         const referencePath = path.resolve(skillDir, reference);
-        if (await (0, fs_1.exists)(referencePath)) {
+        const relativeReferencePath = path.relative(skillDir, referencePath);
+        if (relativeReferencePath === ".." ||
+            relativeReferencePath.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relativeReferencePath)) {
+            issues.push(createIssue("error", "external-local-reference", "SKILL.md", `Referenced local file escapes the skill root: ${reference}`, {
+                category: "references",
+                suggestion: "Keep local links inside the skill directory so packaging stays self-contained."
+            }));
             continue;
         }
-        issues.push(createIssue("error", "missing-local-reference", "SKILL.md", `Referenced local file not found: ${reference}`, {
-            category: "references",
-            suggestion: `Create ${reference} or update the markdown link to point at an existing bundled file.`
-        }));
+        if (!(await (0, fs_1.exists)(referencePath))) {
+            issues.push(createIssue("error", "missing-local-reference", "SKILL.md", `Referenced local file not found: ${reference}`, {
+                category: "references",
+                suggestion: `Create ${reference} or update the markdown link to point at an existing bundled file.`
+            }));
+            continue;
+        }
+        const referenceStat = await (0, promises_1.stat)(referencePath);
+        if (referenceStat.isDirectory()) {
+            issues.push(createIssue("error", "reference-target-is-directory", "SKILL.md", `Referenced local path is a directory: ${reference}`, {
+                category: "references",
+                suggestion: "Link to a specific bundled file instead of a directory."
+            }));
+        }
     }
     await validateScriptExecutables(skillDir, issues);
     return {

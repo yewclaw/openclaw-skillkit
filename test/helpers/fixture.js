@@ -40,9 +40,39 @@ async function readArchiveEntries(archivePath) {
   return entries;
 }
 
+async function readArchiveEntry(archivePath, entryName) {
+  const buffer = await fs.readFile(archivePath);
+  let offset = 0;
+
+  while (offset + 30 <= buffer.length) {
+    const signature = buffer.readUInt32LE(offset);
+    if (signature !== 0x04034b50) {
+      break;
+    }
+
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const fileNameLength = buffer.readUInt16LE(offset + 26);
+    const extraFieldLength = buffer.readUInt16LE(offset + 28);
+    const fileNameStart = offset + 30;
+    const fileNameEnd = fileNameStart + fileNameLength;
+    const currentEntryName = buffer.toString("utf8", fileNameStart, fileNameEnd);
+    const dataStart = fileNameEnd + extraFieldLength;
+    const dataEnd = dataStart + compressedSize;
+
+    if (currentEntryName === entryName) {
+      return buffer.toString("utf8", dataStart, dataEnd);
+    }
+
+    offset = dataEnd;
+  }
+
+  throw new Error(`Archive entry not found: ${entryName}`);
+}
+
 module.exports = {
   copyFixture,
   fixturesRoot,
   makeTempDir,
-  readArchiveEntries
+  readArchiveEntries,
+  readArchiveEntry
 };

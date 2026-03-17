@@ -4,6 +4,7 @@ import { writeFile } from "node:fs/promises";
 import { listFilesRecursive } from "./fs";
 
 const crcTable = createCrcTable();
+const PACK_MANIFEST_PATH = ".openclaw-skillkit/manifest.json";
 
 interface ZipEntry {
   name: string;
@@ -12,8 +13,29 @@ interface ZipEntry {
   offset: number;
 }
 
-export async function createSkillArchive(sourceDir: string, destinationFile: string): Promise<number> {
-  const files = await listFilesRecursive(sourceDir);
+export interface SkillArchiveSummary {
+  fileCount: number;
+  packagedEntries: string[];
+}
+
+export async function createSkillArchive(sourceDir: string, destinationFile: string): Promise<SkillArchiveSummary> {
+  const files = (await listFilesRecursive(sourceDir))
+    .filter((file) => !file.relativePath.endsWith(".skill"))
+    .sort(compareArchiveEntries);
+  const packagedEntries = files.map((file) => normalizeArchivePath(file.relativePath));
+  const manifestBuffer = Buffer.from(
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        packagedAt: new Date().toISOString(),
+        sourceDir: path.basename(sourceDir),
+        entries: packagedEntries
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
   const chunks: Buffer[] = [];
   const entries: ZipEntry[] = [];
   let offset = 0;
@@ -36,6 +58,8 @@ export async function createSkillArchive(sourceDir: string, destinationFile: str
     });
   }
 
+  offset = appendEntry(chunks, entries, offset, PACK_MANIFEST_PATH, manifestBuffer);
+
   const centralDirectoryStart = offset;
 
   for (const entry of entries) {
@@ -48,7 +72,25 @@ export async function createSkillArchive(sourceDir: string, destinationFile: str
   chunks.push(makeEndOfCentralDirectoryRecord(entries.length, centralDirectorySize, centralDirectoryStart));
 
   await writeFile(destinationFile, Buffer.concat(chunks));
-  return entries.length;
+  return {
+    fileCount: entries.length,
+    packagedEntries
+  };
+}
+
+function compareArchiveEntries(
+  left: { relativePath: string },
+  right: { relativePath: string }
+): number {
+  if (left.relativePath === "SKILL.md") {
+    return right.relativePath === "SKILL.md" ? 0 : -1;
+  }
+
+  if (right.relativePath === "SKILL.md") {
+    return 1;
+  }
+
+  return left.relativePath.localeCompare(right.relativePath);
 }
 
 function normalizeArchivePath(relativePath: string): string {
@@ -73,6 +115,22 @@ function makeLocalFileHeader(name: string, crc32: number, size: number): Buffer 
   nameBuffer.copy(header, 30);
 
   return header;
+}
+
+function appendEntry(chunks: Buffer[], entries: ZipEntry[], offset: number, name: string, data: Buffer): number {
+  const crc32 = crc32Buffer(data);
+  const localHeader = makeLocalFileHeader(name, crc32, data.length);
+  const headerOffset = offset;
+
+  chunks.push(localHeader, data);
+  entries.push({
+    name,
+    data,
+    crc32,
+    offset: headerOffset
+  });
+
+  return offset + localHeader.length + data.length;
 }
 
 function makeCentralDirectoryHeader(name: string, crc32: number, size: number, offset: number): Buffer {

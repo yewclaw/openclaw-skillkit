@@ -6,7 +6,7 @@ Build, lint, package, and benchmark OpenClaw skills with a lean Node.js CLI.
 
 - Start a new skill with a consistent layout in one command
 - Catch weak metadata, broken references, and placeholder content before review
-- Package a `.skill` archive only after lint passes
+- Package a `.skill` archive only after lint passes, with a built-in manifest for inspection
 - Measure detection quality and CLI round-trip performance with repeatable benchmarks
 
 ## Why This Exists
@@ -98,7 +98,7 @@ skills/customer-support/
 - invalid semver-like versions
 - placeholder descriptions or scaffold body copy left in place
 - missing headings that make the skill hard to review
-- broken local file references
+- broken local file references, including links that escape the skill root
 - stable issue codes and fix suggestions for each finding
 - focus-area summaries and next-step guidance for authors and CI consumers
 - JSON output for CI, editor extensions, and custom tooling
@@ -169,6 +169,7 @@ Example JSON output:
 ### 3. Package only when the skill is good enough to ship
 
 `pack` runs lint first and refuses to create a `.skill` archive if blocking errors exist.
+It also skips nested `.skill` files and writes `.openclaw-skillkit/manifest.json` into the archive so adopters can inspect exactly what was bundled.
 
 ```bash
 openclaw-skillkit pack skills/customer-support
@@ -210,6 +211,7 @@ Working examples live in:
 This repo is opinionated about trust:
 
 - `pack` is gated by lint, so broken skills do not get archived by accident
+- packaged archives include a manifest and avoid recursively bundling old `.skill` artifacts
 - fixture-driven tests cover parsing, linting, CLI behavior, and archive contents
 - `npm run verify` runs tests and benchmarks, and also typechecks plus rebuilds `dist/` when the local TypeScript compiler is available
 - GitHub Actions runs the same `npm run verify` command on pushes and pull requests
