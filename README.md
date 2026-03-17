@@ -172,9 +172,12 @@ Example success output:
 
 ```text
 Linting /tmp/openclaw-skillkit-repo/examples/weather-research-skill
-  OK: skill structure looks valid (1 file(s) checked).
-  Ready: openclaw-skillkit pack /tmp/openclaw-skillkit-repo/examples/weather-research-skill
-  Inspect after packing: openclaw-skillkit inspect /tmp/openclaw-skillkit-repo/examples/weather-research-skill.skill
+Status: READY TO PACKAGE
+Summary: 0 error(s), 0 warning(s), 1 file(s) checked.
+  Confidence: no blocking issues or warnings were found.
+Next:
+  1. Pack when ready: openclaw-skillkit pack /tmp/openclaw-skillkit-repo/examples/weather-research-skill
+  2. Run a full review before handoff: openclaw-skillkit review /tmp/openclaw-skillkit-repo/examples/weather-research-skill
 ```
 
 Example actionable failure output:
@@ -184,7 +187,7 @@ Linting /tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill
   ERROR [invalid-frontmatter-version] SKILL.md: Frontmatter version must look like semver. Received "version1".
     Fix: Use a semver-style version such as "0.1.0" or "1.2.3-beta.1".
 Summary: 2 error(s), 2 warning(s), 1 file(s) checked.
-Action plan:
+Next:
   1. Fix blocking metadata issues first. Update the SKILL.md frontmatter so name, description, and version clearly identify the skill.
   2. Then review structure warnings. Add the standard sections and make the workflow easy to follow as numbered steps.
   3. Re-run: openclaw-skillkit lint /tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill
@@ -248,10 +251,14 @@ openclaw-skillkit pack
 Example success output:
 
 ```text
+PACKAGED SUCCESSFULLY
 Archive ready: /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill
   Skill: customer-support@0.1.0 (4 bundled file(s) plus manifest, 1.3 KB).
+  Confidence: the archive includes an embedded manifest for later inspection.
   Contents: SKILL.md, references/README.md, scripts/example.sh, assets/README.txt
-  Inspect: openclaw-skillkit inspect /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill
+Next:
+  1. Inspect the shipped artifact: openclaw-skillkit inspect /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill
+  2. Verify source parity: openclaw-skillkit inspect /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill --source ./path-to-skill
 ```
 
 Use `--report` to write a Markdown handoff summary next to the archive by default, or pass an explicit path such as `--report ./artifacts/customer-support.report.md`.

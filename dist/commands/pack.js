@@ -48,10 +48,14 @@ async function runPack(targetDir, options) {
     printArchiveSummary(packResult.destination, packResult.archiveSizeBytes, packResult.manifest, reportPath);
 }
 function printArchiveSummary(destination, archiveSize, manifest, reportPath) {
+    console.log("PACKAGED SUCCESSFULLY");
     console.log(`Archive ready: ${destination}`);
     console.log(`  Skill: ${manifest.skill.name}@${manifest.skill.version} (${manifest.entryCount} bundled file(s) plus manifest, ${(0, workflow_1.formatBytes)(archiveSize)}).`);
+    console.log("  Confidence: the archive includes an embedded manifest for later inspection.");
     console.log(`  Contents: ${manifest.entries.map((entry) => entry.path).join(", ")}`);
-    console.log(`  Inspect: openclaw-skillkit inspect ${destination}`);
+    console.log("Next:");
+    console.log(`  1. Inspect the shipped artifact: openclaw-skillkit inspect ${destination}`);
+    console.log(`  2. Verify source parity: openclaw-skillkit inspect ${destination} --source ./path-to-skill`);
     if (reportPath) {
         console.log(`  Report: ${reportPath}`);
     }

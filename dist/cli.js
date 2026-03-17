@@ -1,11 +1,7 @@
 #!/usr/bin/env node
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
-const node_path_1 = __importDefault(require("node:path"));
 const args_1 = require("./lib/args");
 const init_1 = require("./commands/init");
 const lint_1 = require("./commands/lint");
@@ -14,7 +10,6 @@ const inspect_1 = require("./commands/inspect");
 const review_1 = require("./commands/review");
 const serve_1 = require("./commands/serve");
 const templates_1 = require("./lib/templates");
-const init_2 = require("./commands/init");
 async function main(argv = process.argv.slice(2)) {
     const parsed = (0, args_1.parseArgs)(argv);
     const wantsHelp = parsed.command === "help" || (0, args_1.getFlag)(parsed, "help") === true;
@@ -63,7 +58,7 @@ async function handleInit(parsed) {
             .filter(Boolean)
         : [];
     const template = parseTemplateMode((0, args_1.getFlag)(parsed, "template"));
-    await (0, init_1.runInit)({
+    const result = await (0, init_1.runInit)({
         targetDir,
         name: typeof (0, args_1.getFlag)(parsed, "name") === "string" ? String((0, args_1.getFlag)(parsed, "name")) : undefined,
         description: typeof (0, args_1.getFlag)(parsed, "description") === "string"
@@ -73,18 +68,21 @@ async function handleInit(parsed) {
         resources,
         force: (0, args_1.getFlag)(parsed, "force") === true
     });
-    const resolvedTargetDir = node_path_1.default.resolve(targetDir);
     const createdEntries = ["SKILL.md"];
     for (const resource of templateResourcesForSummary(template, resources)) {
         createdEntries.push(`${resource}/`);
     }
-    console.log(`Initialized skill at ${resolvedTargetDir}`);
-    console.log(`Template: ${template}`);
+    console.log("READY TO AUTHOR");
+    console.log(`Initialized skill at ${result.skillDir}`);
+    console.log(`Skill: ${result.inferredName}`);
+    console.log(`Template: ${result.template}`);
     console.log(`Created: ${createdEntries.join(", ")}`);
-    console.log(`Next: edit ${resolvedTargetDir}/SKILL.md`);
-    console.log(`Reference example: ${(0, init_2.getExampleSkillForTemplate)(template, resources)}`);
-    console.log(`Then: openclaw-skillkit lint ${resolvedTargetDir}`);
-    console.log(`Ship: openclaw-skillkit pack ${resolvedTargetDir}`);
+    console.log(`Edit: ${result.skillFile}`);
+    console.log(`Reference example: ${result.exampleSkill}`);
+    console.log("Next:");
+    console.log(`  1. Add real instructions to ${result.skillFile}`);
+    console.log(`  2. Validate: openclaw-skillkit lint ${result.skillDir}`);
+    console.log(`  3. Package when clean: openclaw-skillkit pack ${result.skillDir}`);
 }
 async function handleLint(parsed) {
     assertNoUnexpectedFlags(parsed, ["format", "json"]);

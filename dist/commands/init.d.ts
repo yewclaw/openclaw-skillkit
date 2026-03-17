@@ -7,5 +7,13 @@ export interface InitOptions {
     resources: string[];
     force: boolean;
 }
-export declare function runInit(options: InitOptions): Promise<void>;
+export interface InitResult {
+    skillDir: string;
+    skillFile: string;
+    template: TemplateMode;
+    resources: string[];
+    inferredName: string;
+    exampleSkill: string;
+}
+export declare function runInit(options: InitOptions): Promise<InitResult>;
 export declare function getExampleSkillForTemplate(template: TemplateMode, resources: string[]): string;

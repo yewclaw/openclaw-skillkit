@@ -37,6 +37,7 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
   }
 
   console.log(`Inspecting ${inspected.archivePath}`);
+  console.log(`  Status: ${formatInspectStatus(inspected)}`);
   console.log(`  Skill: ${inspected.manifest.skill.name}@${inspected.manifest.skill.version}`);
   console.log(`  Description: ${inspected.manifest.skill.description}`);
   console.log(
@@ -80,6 +81,11 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
     }
   }
 
+  if (!hasComparison(inspected)) {
+    console.log("  Confidence: manifest read directly from the packaged archive.");
+    console.log(`  Next: run openclaw-skillkit inspect ${inspected.archivePath} --source ./path-to-skill to check for drift.`);
+  }
+
   if (reportPath) {
     console.log(`  Report: ${reportPath}`);
   }
@@ -89,4 +95,12 @@ function hasComparison(
   value: { archivePath: string; manifest: unknown; comparison?: ArchiveSourceComparison }
 ): value is { archivePath: string; manifest: { entries: Array<{ path: string; size: number }> }; comparison: ArchiveSourceComparison } {
   return Boolean(value.comparison);
+}
+
+function formatInspectStatus(result: { comparison?: ArchiveSourceComparison }): string {
+  if (!result.comparison) {
+    return "ARCHIVE VERIFIED";
+  }
+
+  return result.comparison.matches ? "ARCHIVE MATCHES SOURCE" : "DRIFT DETECTED";
 }

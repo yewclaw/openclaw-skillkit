@@ -75,13 +75,14 @@ serialTest("cli init scaffolds a skill with requested resources", async () => {
   ]);
 
   assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /READY TO AUTHOR/);
   assert.match(result.stdout, /Initialized skill at/);
   assert.match(result.stdout, /Template: minimal/);
   assert.match(result.stdout, /Created: SKILL\.md, references\/, scripts\/, assets\//);
-  assert.match(result.stdout, /Next: edit .*SKILL\.md/);
+  assert.match(result.stdout, /Edit: .*SKILL\.md/);
   assert.match(result.stdout, /Reference example: examples\/weather-research-skill/);
-  assert.match(result.stdout, /Then: openclaw-skillkit lint /);
-  assert.match(result.stdout, /Ship: openclaw-skillkit pack /);
+  assert.match(result.stdout, /Validate: openclaw-skillkit lint /);
+  assert.match(result.stdout, /Package when clean: openclaw-skillkit pack /);
   const skillMarkdown = await fs.readFile(path.join(targetDir, "SKILL.md"), "utf8");
   assert.match(skillMarkdown, /name: customer-support/);
   assert.match(skillMarkdown, /## Inputs/);
@@ -121,9 +122,10 @@ serialTest("cli lint succeeds for a valid fixture", async () => {
   const result = await runCli(["lint", skillDir]);
 
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /OK: skill structure looks valid/);
-  assert.match(result.stdout, /Ready: openclaw-skillkit pack /);
-  assert.match(result.stdout, /Inspect after packing: openclaw-skillkit inspect /);
+  assert.match(result.stdout, /Status: READY TO PACKAGE/);
+  assert.match(result.stdout, /Confidence: no blocking issues or warnings were found\./);
+  assert.match(result.stdout, /Pack when ready: openclaw-skillkit pack /);
+  assert.match(result.stdout, /Run a full review before handoff: openclaw-skillkit review /);
 });
 
 serialTest("cli lint fails for an invalid fixture", async () => {
@@ -134,10 +136,11 @@ serialTest("cli lint fails for an invalid fixture", async () => {
   const result = await runCli(["lint", skillDir]);
 
   assert.equal(result.code, 1);
+  assert.match(result.stdout, /Status: BLOCKED/);
   assert.match(result.stdout, /ERROR \[invalid-frontmatter-version\] SKILL\.md: Frontmatter version must look like semver/);
   assert.match(result.stdout, /Fix: Use a semver-style version such as "0\.1\.0" or "1\.2\.3-beta\.1"\./);
   assert.match(result.stdout, /ERROR \[short-frontmatter-name\] SKILL\.md: Frontmatter name must be at least 3 characters/);
-  assert.match(result.stdout, /Action plan:/);
+  assert.match(result.stdout, /Next:/);
   assert.match(result.stdout, /Fix blocking metadata issues first\./);
   assert.match(result.stdout, /Re-run: openclaw-skillkit lint /);
 });
@@ -203,10 +206,11 @@ serialTest("cli pack creates a .skill archive for a valid fixture", async () => 
   const result = await runCli(["pack", skillDir, "--output", outputPath]);
 
   assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /PACKAGED SUCCESSFULLY/);
   assert.match(result.stdout, /Archive ready: /);
   assert.match(result.stdout, /Skill: weather-research@1\.2\.3/);
   assert.match(result.stdout, /Contents: SKILL\.md, assets\/README\.txt, references\/README\.md, scripts\/example\.sh/);
-  assert.match(result.stdout, /Inspect: openclaw-skillkit inspect /);
+  assert.match(result.stdout, /Inspect the shipped artifact: openclaw-skillkit inspect /);
   const entries = await readArchiveEntries(outputPath);
   assert.deepEqual(entries.sort(), [
     ".openclaw-skillkit/manifest.json",
@@ -264,7 +268,7 @@ serialTest("cli pack fails when lint errors exist", async () => {
   const result = await runCli(["pack", skillDir]);
 
   assert.equal(result.code, 1);
-  assert.match(result.stderr, /Cannot pack .* because lint found 2 error\(s\)\./);
+  assert.match(result.stderr, /Cannot pack .* because lint found 2 error\(s\)\. Run "openclaw-skillkit lint .*" first\./);
 });
 
 serialTest("cli pack defaults to the current directory", async () => {
@@ -397,9 +401,11 @@ serialTest("cli inspect reads the embedded archive manifest", async () => {
 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Inspecting /);
+  assert.match(result.stdout, /Status: ARCHIVE VERIFIED/);
   assert.match(result.stdout, /Skill: weather-research@1\.2\.3/);
   assert.match(result.stdout, /Description: Skill for structured weather research/);
   assert.match(result.stdout, /Contents: SKILL\.md \(\d+ B\), assets\/README\.txt/);
+  assert.match(result.stdout, /Next: run openclaw-skillkit inspect .* --source \.\/path-to-skill to check for drift\./);
 });
 
 serialTest("cli inspect supports json output", async () => {

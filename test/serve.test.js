@@ -32,7 +32,8 @@ test("studio assets expose the local app shell and workflow controls", () => {
   assert.match(assets.js, /compareArchiveToSource|source comparison/i);
   assert.match(assets.js, /Release report:/);
   assert.match(assets.js, /setStatus\("Ready to author"/);
-  assert.match(assets.js, /Recommended command:/);
+  assert.match(assets.js, /PACKAGED SUCCESSFULLY/);
+  assert.match(assets.js, /Next steps:/);
 });
 
 test("workflow helpers surface example skills for the studio", async () => {

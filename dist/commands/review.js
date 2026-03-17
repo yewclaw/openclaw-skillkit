@@ -19,6 +19,7 @@ async function runReview(targetDir, options) {
     console.log(`Reviewing ${review.skillDir}`);
     console.log(`  Readiness: ${formatReadinessLabel(review.readiness)}`);
     console.log(`  Lint: ${review.lint.summary.errors} error(s), ${review.lint.summary.warnings} warning(s) across ${review.lint.fileCount} file(s).`);
+    console.log(`  Confidence: ${formatReviewConfidence(review)}`);
     if (review.lint.focusAreas.length > 0) {
         console.log(`  Focus areas: ${review.lint.focusAreas
             .map((area) => `${area.label} (${area.errors} error(s), ${area.warnings} warning(s))`)
@@ -58,4 +59,16 @@ function formatReadinessLabel(readiness) {
         default:
             return "NOT READY";
     }
+}
+function formatReviewConfidence(review) {
+    if (review.readiness === "ready") {
+        return "lint passed cleanly, the archive was created, and the artifact matches the source.";
+    }
+    if (review.readiness === "ready-with-warnings") {
+        return "the skill can ship, but warnings still deserve a final pass before handoff.";
+    }
+    if (review.archive?.comparison.matches === false) {
+        return "the packaged artifact no longer matches the current source.";
+    }
+    return "blocking issues remain, so this skill should not be handed off yet.";
 }

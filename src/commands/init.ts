@@ -19,7 +19,16 @@ export interface InitOptions {
   force: boolean;
 }
 
-export async function runInit(options: InitOptions): Promise<void> {
+export interface InitResult {
+  skillDir: string;
+  skillFile: string;
+  template: TemplateMode;
+  resources: string[];
+  inferredName: string;
+  exampleSkill: string;
+}
+
+export async function runInit(options: InitOptions): Promise<InitResult> {
   const skillDir = path.resolve(options.targetDir);
   const skillFile = path.join(skillDir, "SKILL.md");
 
@@ -57,6 +66,15 @@ export async function runInit(options: InitOptions): Promise<void> {
       await writeTextFile(path.join(resourceDir, "README.txt"), EXAMPLE_ASSET);
     }
   }
+
+  return {
+    skillDir,
+    skillFile,
+    template: options.template,
+    resources,
+    inferredName,
+    exampleSkill: getExampleSkillForTemplate(options.template, options.resources)
+  };
 }
 
 export function getExampleSkillForTemplate(template: TemplateMode, resources: string[]): string {

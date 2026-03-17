@@ -42,6 +42,14 @@ async function runInit(options) {
             await (0, fs_1.writeTextFile)(node_path_1.default.join(resourceDir, "README.txt"), templates_1.EXAMPLE_ASSET);
         }
     }
+    return {
+        skillDir,
+        skillFile,
+        template: options.template,
+        resources,
+        inferredName,
+        exampleSkill: getExampleSkillForTemplate(options.template, options.resources)
+    };
 }
 function getExampleSkillForTemplate(template, resources) {
     const effectiveResources = new Set([...templates_1.TEMPLATE_MODES[template], ...resources]);

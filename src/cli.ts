@@ -8,7 +8,6 @@ import { runInspect } from "./commands/inspect";
 import { runReview } from "./commands/review";
 import { runServe } from "./commands/serve";
 import { TEMPLATE_MODES, type TemplateMode } from "./lib/templates";
-import { getExampleSkillForTemplate } from "./commands/init";
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const parsed = parseArgs(argv);
@@ -64,7 +63,7 @@ async function handleInit(parsed: ReturnType<typeof parseArgs>): Promise<void> {
     : [];
   const template = parseTemplateMode(getFlag(parsed, "template"));
 
-  await runInit({
+  const result = await runInit({
     targetDir,
     name: typeof getFlag(parsed, "name") === "string" ? String(getFlag(parsed, "name")) : undefined,
     description:
@@ -76,19 +75,22 @@ async function handleInit(parsed: ReturnType<typeof parseArgs>): Promise<void> {
     force: getFlag(parsed, "force") === true
   });
 
-  const resolvedTargetDir = path.resolve(targetDir);
   const createdEntries = ["SKILL.md"];
   for (const resource of templateResourcesForSummary(template, resources)) {
     createdEntries.push(`${resource}/`);
   }
 
-  console.log(`Initialized skill at ${resolvedTargetDir}`);
-  console.log(`Template: ${template}`);
+  console.log("READY TO AUTHOR");
+  console.log(`Initialized skill at ${result.skillDir}`);
+  console.log(`Skill: ${result.inferredName}`);
+  console.log(`Template: ${result.template}`);
   console.log(`Created: ${createdEntries.join(", ")}`);
-  console.log(`Next: edit ${resolvedTargetDir}/SKILL.md`);
-  console.log(`Reference example: ${getExampleSkillForTemplate(template, resources)}`);
-  console.log(`Then: openclaw-skillkit lint ${resolvedTargetDir}`);
-  console.log(`Ship: openclaw-skillkit pack ${resolvedTargetDir}`);
+  console.log(`Edit: ${result.skillFile}`);
+  console.log(`Reference example: ${result.exampleSkill}`);
+  console.log("Next:");
+  console.log(`  1. Add real instructions to ${result.skillFile}`);
+  console.log(`  2. Validate: openclaw-skillkit lint ${result.skillDir}`);
+  console.log(`  3. Package when clean: openclaw-skillkit pack ${result.skillDir}`);
 }
 
 async function handleLint(parsed: ReturnType<typeof parseArgs>): Promise<void> {

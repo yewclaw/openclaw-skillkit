@@ -90,7 +90,7 @@ async function handleRequest(request, response) {
             const template = parseTemplate(body.template);
             const targetDir = requireString(body.targetDir, "targetDir");
             const resources = Array.isArray(body.resources) ? body.resources.filter((value) => typeof value === "string") : [];
-            await (0, init_1.runInit)({
+            const initialized = await (0, init_1.runInit)({
                 targetDir,
                 name: typeof body.name === "string" ? body.name : undefined,
                 description: typeof body.description === "string" ? body.description : undefined,
@@ -99,10 +99,7 @@ async function handleRequest(request, response) {
                 force: body.force === true
             });
             sendJson(response, 200, {
-                targetDir: node_path_1.default.resolve(targetDir),
-                template,
-                resources: [...new Set([...templates_1.TEMPLATE_MODES[template], ...resources])],
-                skillFile: node_path_1.default.resolve(targetDir, "SKILL.md")
+                ...initialized
             });
             return;
         }
@@ -291,7 +288,7 @@ const HTML_PAGE = String.raw `<!doctype html>
         <div>
           <p class="eyebrow">Studio Status</p>
           <strong id="status-title">Ready to author</strong>
-          <p id="status-body" class="status-copy">Pick an example or initialize a new skill to start the workflow.</p>
+          <p id="status-body" class="status-copy">Pick an example or initialize a new skill. Each panel will prefill the next step as you go.</p>
         </div>
         <code id="cwd"></code>
       </section>
@@ -350,7 +347,7 @@ const HTML_PAGE = String.raw `<!doctype html>
 Recommended flow:
 1. Choose a target directory and template.
 2. Create the scaffold.
-3. Edit SKILL.md, then lint and package it.</pre>
+3. Edit SKILL.md, then lint, package, and review it.</pre>
         </section>
 
         <section class="panel">
@@ -382,10 +379,10 @@ Recommended flow:
 Expected outcome:
 - zero blocking errors
 - a short action plan
-- a clear pack command when the skill is ready</pre>
+- a clear pack or review command when the skill is ready</pre>
           <pre id="pack-result" class="result-card muted">Pack output will appear here.
 
-When packaging succeeds, the inspect form will be prefilled automatically.</pre>
+When packaging succeeds, the inspect form will be prefilled automatically and the next inspect command will be obvious.</pre>
           <pre id="review-result" class="result-card muted">Review output will appear here.
 
 Use this when you want one release-readiness verdict with lint, packaging, and artifact checks together.</pre>
@@ -845,12 +842,12 @@ async function boot() {
   cwdLabel.textContent = payload.cwd;
   templateSelect.innerHTML = state.templates.map((template) => '<option value="' + template + '">' + template + "</option>").join("");
   renderExamples();
-  setStatus("Ready to author", "Pick an example or initialize a new skill to start the workflow.", "neutral");
+  setStatus("Ready to author", "Pick an example or initialize a new skill. Each result card will point you to the next action.", "neutral");
 }
 
 function renderExamples() {
   if (state.examples.length === 0) {
-    exampleList.innerHTML = '<article class="example-card"><strong>No examples found</strong><p>Add example skills to the repository to make the studio easier to demo and review.</p></article>';
+    exampleList.innerHTML = '<article class="example-card"><strong>No examples found</strong><p>Use the Create panel to scaffold a first skill, or add example skills to the repository for faster demos and onboarding.</p></article>';
     return;
   }
 
@@ -875,7 +872,7 @@ function renderExamples() {
       skillDirInput.value = value;
       outputPathInput.value = value + ".skill";
       inspectSourceInput.value = value;
-      setStatus("Example loaded", "The skill directory is prefilled. Run lint when you are ready to validate it.", "ok");
+      setStatus("Example loaded", "The skill directory and archive path are prefilled. Run lint when you are ready to validate it.", "ok");
     });
   }
 
@@ -911,17 +908,20 @@ initForm.addEventListener("submit", async (event) => {
     renderResult(initResult, [
       "Skill scaffold created",
       "",
-      "Target: " + result.targetDir,
-      "Template: " + result.template,
-      "Resources: " + (result.resources.length ? result.resources.join(", ") : "none"),
+      "READY TO AUTHOR",
+      "",
+      "Target: " + result.skillDir,
       "Skill file: " + result.skillFile,
+      "Template: " + result.template,
+      "Resources: " + formatList(result.resources, "none"),
+      "Reference example: " + result.exampleSkill,
       "",
       "Next:",
-      "1. Edit SKILL.md with real instructions.",
+      "1. Replace scaffold copy in SKILL.md with real instructions.",
       "2. Run lint in the Validate panel.",
-      "3. Package the skill once lint is clean."
+      "3. Run review before handing the skill off."
     ].join("\n"));
-    setStatus("Skill initialized", "The working directory and output archive path have been prefilled for the next steps.", "ok");
+    setStatus("Skill initialized", "The working directory, archive path, and inspect source field have been prefilled for the next steps.", "ok");
   } catch (error) {
     renderResult(initResult, error.message, true);
     setStatus("Init failed", error.message, "error");
@@ -941,9 +941,11 @@ lintForm.addEventListener("submit", async (event) => {
     });
     renderResult(lintResult, formatLintResult(result), !result.ok);
     setStatus(
-      result.ok ? "Lint passed" : "Lint found issues",
+      result.summary.errors === 0 && result.summary.warnings === 0 ? "Ready to package" : result.ok ? "Packable with warnings" : "Lint found issues",
       result.ok
-        ? "This skill is ready for packaging. Use the Package button to create an archive."
+        ? result.summary.warnings === 0
+          ? "This skill is clean. Package it now or run review for one release-readiness verdict."
+          : "Packaging is allowed, but review the warnings before handoff."
         : "Review the issues and action plan in the lint output before packaging.",
       result.ok ? "ok" : "error"
     );
@@ -966,7 +968,7 @@ packButton.addEventListener("click", async () => {
     archivePathInput.value = result.archivePath;
     inspectSourceInput.value = skillDirInput.value;
     renderResult(packResult, formatPackResult(result));
-    setStatus("Archive packaged", "The inspect form now points at the new archive and source directory so you can review drift immediately.", "ok");
+    setStatus("Archive packaged", "The inspect form now points at the new archive and source directory so you can verify drift immediately.", "ok");
   } catch (error) {
     renderResult(packResult, error.message, true);
     setStatus("Packaging failed", error.message, "error");
@@ -1054,7 +1056,7 @@ async function api(url, body) {
 
 function formatLintResult(result) {
   const lines = [
-    result.ok ? "Lint passed" : "Lint found issues",
+    result.summary.errors > 0 ? "BLOCKED" : result.summary.warnings > 0 ? "PACKABLE WITH WARNINGS" : "READY TO PACKAGE",
     "",
     "Directory: " + result.skillDir,
     "Files checked: " + result.fileCount,
@@ -1083,8 +1085,8 @@ function formatLintResult(result) {
     result.nextSteps.forEach((step, index) => lines.push((index + 1) + ". " + step));
   }
 
-  if (result.ok) {
-    lines.push("", "Recommended command:", "openclaw-skillkit pack " + result.skillDir);
+  if (result.ok && result.summary.warnings === 0) {
+    lines.push("", "Confidence:", "No blocking issues or warnings were found.");
   }
 
   return lines.join("\n");
@@ -1092,13 +1094,14 @@ function formatLintResult(result) {
 
 function formatPackResult(result) {
   const lines = [
-    "Archive packaged",
+    "PACKAGED SUCCESSFULLY",
     "",
     "Archive ready: " + result.archivePath,
     "Size: " + result.archiveSizeLabel,
     "Manifest schema: v" + result.manifest.schemaVersion,
     "Skill: " + result.manifest.skill.name + "@" + result.manifest.skill.version,
-    "Entries: " + result.manifest.entryCount
+    "Entries: " + result.manifest.entryCount,
+    "Confidence: embedded manifest written into the archive for later inspection."
   ];
 
   if (result.warnings.length) {
@@ -1113,9 +1116,11 @@ function formatPackResult(result) {
     lines.push("- " + entry.path + " (" + entry.size + " B, sha256 " + (entry.sha256 ? entry.sha256.slice(0, 12) : "n/a") + "...)");
   }
 
+  lines.push("", "Next steps:");
+  lines.push("1. Inspect the artifact: openclaw-skillkit inspect " + result.archivePath);
+  lines.push("2. Check source parity: openclaw-skillkit inspect " + result.archivePath + " --source ./path-to-skill");
   lines.push("", "Release report:");
   lines.push(result.reportMarkdown);
-  lines.push("", "Recommended command:", "openclaw-skillkit inspect " + result.archivePath + " --source ./path-to-skill");
 
   return lines.join("\n");
 }
@@ -1123,7 +1128,7 @@ function formatPackResult(result) {
 function formatInspectResult(result) {
   const manifest = result.manifest;
   const lines = [
-    "Archive inspection",
+    result.comparison ? result.comparison.matches ? "ARCHIVE MATCHES SOURCE" : "DRIFT DETECTED" : "ARCHIVE VERIFIED",
     "",
     "Archive: " + result.archivePath,
     "Manifest schema: v" + manifest.schemaVersion,
@@ -1176,6 +1181,10 @@ function formatInspectResult(result) {
     }
   }
 
+  if (!result.comparison) {
+    lines.push("", "Next step:", "openclaw-skillkit inspect " + result.archivePath + " --source ./path-to-skill");
+  }
+
   lines.push("", "Release report:");
   lines.push(result.reportMarkdown);
 
@@ -1189,7 +1198,8 @@ function formatReviewResult(result) {
     "Directory: " + result.skillDir,
     "Verdict: " + formatReadiness(result.readiness),
     "Lint summary: " + result.lint.summary.errors + " error(s), " + result.lint.summary.warnings + " warning(s)",
-    "Files checked: " + result.lint.fileCount
+    "Files checked: " + result.lint.fileCount,
+    "Confidence: " + formatReviewConfidence(result)
   ];
 
   if (result.lint.focusAreas.length) {
@@ -1263,6 +1273,10 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function formatList(values, emptyLabel) {
+  return values.length ? values.join(", ") : emptyLabel;
+}
+
 function formatReadiness(readiness) {
   if (readiness === "ready") {
     return "ready to ship";
@@ -1273,5 +1287,21 @@ function formatReadiness(readiness) {
   }
 
   return "not ready";
+}
+
+function formatReviewConfidence(result) {
+  if (result.readiness === "ready") {
+    return "lint passed cleanly, the archive was created, and the artifact matches the source.";
+  }
+
+  if (result.readiness === "ready-with-warnings") {
+    return "the skill can ship, but warnings still deserve a final pass.";
+  }
+
+  if (result.archive && result.archive.comparison && !result.archive.comparison.matches) {
+    return "the packaged artifact differs from the current source.";
+  }
+
+  return "blocking issues remain, so the skill is not ready to hand off.";
 }
 `;

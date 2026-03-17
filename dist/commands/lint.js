@@ -24,11 +24,21 @@ async function runLint(targetDir, options) {
         return summary.errors === 0 ? 0 : 1;
     }
     console.log(`Linting ${resolved}`);
+    console.log(`Status: ${formatLintStatus(summary)}`);
+    console.log(`Summary: ${summary.errors} error(s), ${summary.warnings} warning(s), ${result.fileCount} file(s) checked.`);
     if (summary.total === 0) {
-        console.log(`  OK: skill structure looks valid (${result.fileCount} file(s) checked).`);
-        console.log(`  Ready: openclaw-skillkit pack ${resolved}`);
-        console.log(`  Inspect after packing: openclaw-skillkit inspect ${resolved}.skill`);
+        console.log("  Confidence: no blocking issues or warnings were found.");
+        console.log("Next:");
+        console.log(`  1. Pack when ready: openclaw-skillkit pack ${resolved}`);
+        console.log(`  2. Run a full review before handoff: openclaw-skillkit review ${resolved}`);
         return 0;
+    }
+    const focusAreas = (0, workflow_1.summarizeFocusAreas)(result);
+    if (focusAreas.length > 0) {
+        console.log("Focus areas:");
+        for (const area of focusAreas) {
+            console.log(`  ${area.label}: ${area.errors} error(s), ${area.warnings} warning(s)`);
+        }
     }
     for (const issue of result.issues) {
         console.log(`  ${issue.level.toUpperCase()} [${issue.code}] ${issue.file}: ${issue.message}`);
@@ -36,12 +46,20 @@ async function runLint(targetDir, options) {
             console.log(`    Fix: ${issue.suggestion}`);
         }
     }
-    console.log(`Summary: ${summary.errors} error(s), ${summary.warnings} warning(s), ${result.fileCount} file(s) checked.`);
     if (actionPlan.length > 0) {
-        console.log("Action plan:");
+        console.log("Next:");
         for (const [index, step] of actionPlan.entries()) {
             console.log(`  ${index + 1}. ${step}`);
         }
     }
     return summary.errors === 0 ? 0 : 1;
+}
+function formatLintStatus(summary) {
+    if (summary.errors > 0) {
+        return "BLOCKED";
+    }
+    if (summary.warnings > 0) {
+        return "PACKABLE WITH WARNINGS";
+    }
+    return "READY TO PACKAGE";
 }

@@ -61,7 +61,10 @@ function summarizeFocusAreas(result) {
 function buildActionPlan(result, resolvedDir) {
     const focusAreas = summarizeFocusAreas(result);
     if (focusAreas.length === 0) {
-        return [`Pack when ready: openclaw-skillkit pack ${resolvedDir}`];
+        return [
+            `Pack when ready: openclaw-skillkit pack ${resolvedDir}`,
+            `Run a release check before handoff: openclaw-skillkit review ${resolvedDir}`
+        ];
     }
     const steps = [];
     const blockingArea = focusAreas.find((area) => area.errors > 0);
@@ -75,6 +78,7 @@ function buildActionPlan(result, resolvedDir) {
     steps.push(`Re-run: openclaw-skillkit lint ${resolvedDir}`);
     if (!blockingArea) {
         steps.push(`Pack when ready: openclaw-skillkit pack ${resolvedDir}`);
+        steps.push(`Run a release check before handoff: openclaw-skillkit review ${resolvedDir}`);
     }
     return steps;
 }
@@ -113,7 +117,7 @@ async function packSkill(targetDir, outputPath) {
     const errors = lintResult.issues.filter((issue) => issue.level === "error");
     const warnings = lintResult.issues.filter((issue) => issue.level === "warning");
     if (errors.length > 0) {
-        throw new Error(`Cannot pack ${resolvedDir} because lint found ${errors.length} error(s).`);
+        throw new Error(`Cannot pack ${resolvedDir} because lint found ${errors.length} error(s). Run "openclaw-skillkit lint ${resolvedDir}" first.`);
     }
     const { destination, normalizedOutputPath } = resolveArchiveDestination(resolvedDir, outputPath);
     if (await (0, fs_1.exists)(destination)) {
