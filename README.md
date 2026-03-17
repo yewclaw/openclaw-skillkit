@@ -19,7 +19,7 @@
 | Area | What you get |
 | --- | --- |
 | `init` | Generate a consistent skill layout with optional `references/`, `scripts/`, and `assets/`. |
-| `lint` | Catch weak metadata, placeholder copy, missing sections, and broken local references before review. |
+| `lint` | Catch weak metadata, placeholder copy, missing sections, and broken local references, with `--all` repo-wide validation for multi-skill maintenance. |
 | `pack` | Create a `.skill` archive only after validation passes, with a manifest and optional release report for inspection. |
 | `inspect` | Read a packaged archive back out, verify exactly what it contains, preview bundled files, and optionally export a handoff report. |
 | `review` | Run a release-readiness pass that lints, packages, verifies source-to-artifact parity, optionally compares against a prior release, and emits one review report. |
@@ -176,10 +176,14 @@ Skill Studio now surfaces the same adaptation path directly in each example card
 - stable issue codes and fix suggestions for every finding
 - focus-area summaries and next-step guidance for authors and CI consumers
 - JSON output for CI, editor extensions, and custom tooling
+- batch mode (`--all`) to lint every skill under a root path in one pass
+- cross-skill duplicate-name detection so repos do not ship conflicting skill identities
+- optional markdown report export (`--report`) for async review handoffs
 
 ```bash
 openclaw-skillkit lint skills/customer-support
 npx openclaw-skillkit lint skills/customer-support --json
+openclaw-skillkit lint skills --all --report
 ```
 
 Example success output:
@@ -342,7 +346,7 @@ That review output now includes a small release scorecard across CLI, Studio, JS
 | --- | --- |
 | `openclaw-skillkit help` | Show CLI help. |
 | `openclaw-skillkit help init` | Show scaffold options and flags. |
-| `openclaw-skillkit help lint` | Show lint modes, including JSON output. |
+| `openclaw-skillkit help lint` | Show lint modes, including JSON output, repo-wide `--all`, and report export. |
 | `openclaw-skillkit help pack` | Show packaging behavior, output options, JSON reporting, and report export. |
 | `openclaw-skillkit help inspect` | Show artifact inspection, source drift comparison, entry preview, release delta comparison, and report export usage. |
 | `openclaw-skillkit help review` | Show the combined release-readiness workflow, baseline comparison, and report export usage. |

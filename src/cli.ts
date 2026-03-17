@@ -94,12 +94,16 @@ async function handleInit(parsed: ReturnType<typeof parseArgs>): Promise<void> {
 }
 
 async function handleLint(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["format", "json"]);
+  assertNoUnexpectedFlags(parsed, ["format", "json", "all", "report"]);
   assertArgumentCount(parsed, 1, "lint accepts at most 1 target directory.");
 
   const targetDir = parsed.positionals[0] ?? ".";
   const format = parseMachineFormat(parsed, "lint");
-  const exitCode = await runLint(targetDir, { format });
+  const exitCode = await runLint(targetDir, {
+    format,
+    all: getFlag(parsed, "all") === true,
+    reportPath: parseOptionalPathFlag(parsed, "report")
+  });
   process.exitCode = exitCode;
 }
 
@@ -208,12 +212,14 @@ Examples:
 Validate a skill directory for packaging and review.
 
 Usage:
-  openclaw-skillkit lint [dir] [--json|--format text|json]
+  openclaw-skillkit lint [dir] [--all] [--report [./reports/lint-all.report.md]] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit lint
   openclaw-skillkit lint --json
   openclaw-skillkit lint examples/weather-research-skill
+  openclaw-skillkit lint skills --all
+  openclaw-skillkit lint skills --all --report
 `);
     return;
   }
@@ -296,7 +302,7 @@ Build, lint, and pack OpenClaw skills.
 
 Usage:
   openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
-  openclaw-skillkit lint [dir] [--json|--format text|json]
+  openclaw-skillkit lint [dir] [--all] [--report [./reports/lint-all.report.md]] [--json|--format text|json]
   openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]

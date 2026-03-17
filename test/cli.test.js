@@ -197,6 +197,78 @@ serialTest("cli lint supports json output for CI and editor tooling", async () =
   assert.match(payload.issues[0].suggestion, /semver-style version/);
 });
 
+serialTest("cli lint can run repo-scale validation across multiple skills", async () => {
+  const tempDir = await makeTempDir("openclaw-lint-all-");
+  const skillsRoot = path.join(tempDir, "skills");
+  await copyFixture(path.join("valid", "basic-skill"), path.join(skillsRoot, "weather"));
+  await copyFixture(path.join("invalid", "bad-version-skill"), path.join(skillsRoot, "broken"));
+
+  const result = await runCli(["lint", skillsRoot, "--all", "--json"]);
+
+  assert.equal(result.code, 1);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.rootDir, skillsRoot);
+  assert.equal(payload.skillCount, 2);
+  assert.equal(payload.summary.blocked, 1);
+  assert.equal(payload.summary.ready, 1);
+  assert.deepEqual(
+    payload.skills.map((entry) => entry.relativeDir).sort(),
+    ["broken", "weather"]
+  );
+  assert.match(payload.skills.find((entry) => entry.relativeDir === "broken").issues[0].code, /invalid-frontmatter-version/);
+});
+
+serialTest("cli lint --all detects duplicate skill names across directories", async () => {
+  const tempDir = await makeTempDir("openclaw-lint-duplicate-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const firstDir = path.join(skillsRoot, "first");
+  const secondDir = path.join(skillsRoot, "second");
+  await copyFixture(path.join("valid", "basic-skill"), firstDir);
+  await copyFixture(path.join("valid", "basic-skill"), secondDir);
+  await fs.writeFile(
+    path.join(secondDir, "SKILL.md"),
+    `---
+name: weather-research
+description: Another skill with a conflicting name for repo lint validation.
+version: 1.0.0
+---
+
+# Duplicate Name Skill
+
+## Purpose
+Detect duplicate frontmatter names in batch lint.
+
+## Workflow
+1. Validate both skill directories.
+
+## Constraints
+- Use unique skill names.
+`
+  );
+
+  const result = await runCli(["lint", skillsRoot, "--all"]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /duplicate-skill-name/);
+  assert.match(result.stdout, /Frontmatter name "weather-research" is duplicated/);
+});
+
+serialTest("cli lint --all can export a markdown report", async () => {
+  const tempDir = await makeTempDir("openclaw-lint-all-report-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const reportPath = path.join(tempDir, "lint-all.md");
+  await copyFixture(path.join("valid", "basic-skill"), path.join(skillsRoot, "weather"));
+
+  const result = await runCli(["lint", skillsRoot, "--all", "--report", reportPath]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Report: /);
+  const report = await fs.readFile(reportPath, "utf8");
+  assert.match(report, /# OpenClaw Skill Batch Lint Report/);
+  assert.match(report, /## Skills/);
+  assert.match(report, /### weather/);
+});
+
 serialTest("cli pack creates a .skill archive for a valid fixture", async () => {
   const tempDir = await makeTempDir("openclaw-pack-valid-");
   const skillDir = path.join(tempDir, "skill");
@@ -608,7 +680,7 @@ serialTest("cli rejects unknown flags with a clear error", async () => {
   const result = await runCli(["lint", "--output", "./artifact.skill"]);
 
   assert.equal(result.code, 1);
-  assert.match(result.stderr, /Unknown flag\(s\): --output\. This command supports --format, --json and --help\./);
+  assert.match(result.stderr, /Unknown flag\(s\): --output\. This command supports --format, --json, --all, --report and --help\./);
 });
 
 serialTest("cli lint rejects conflicting format flags", async () => {
