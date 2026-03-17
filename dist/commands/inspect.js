@@ -7,9 +7,11 @@ async function runInspect(archivePath, options) {
         ? await (0, workflow_1.compareArchiveToSource)(archivePath, options.sourceDir)
         : await (0, workflow_1.inspectSkillArchive)(archivePath);
     const reportPath = await (0, workflow_1.writeArchiveReport)(inspected.archivePath, inspected, options.reportPath);
+    const trust = (0, workflow_1.summarizeArchiveTrust)(inspected);
     if (options.format === "json") {
         console.log(JSON.stringify({
             archivePath: inspected.archivePath,
+            trustSummary: trust,
             manifest: inspected.manifest,
             reportPath,
             reportMarkdown: (0, workflow_1.buildArchiveReport)(inspected),
@@ -19,8 +21,13 @@ async function runInspect(archivePath, options) {
     }
     console.log(`Inspecting ${inspected.archivePath}`);
     console.log(`  Status: ${formatInspectStatus(inspected)}`);
+    console.log(`  Trust: ${trust.headline}`);
     console.log(`  Skill: ${inspected.manifest.skill.name}@${inspected.manifest.skill.version}`);
     console.log(`  Description: ${inspected.manifest.skill.description}`);
+    console.log(`  Confidence: ${trust.confidence}`);
+    console.log(`  Checks: ${trust.checks
+        .map((check) => `${formatAssessment(check.status)} ${check.label.toLowerCase()} (${check.detail})`)
+        .join("; ")}`);
     console.log(`  Entries: ${inspected.manifest.entryCount} bundled file(s), ${(0, workflow_1.formatBytes)(inspected.manifest.totalBytes)} before manifest.`);
     console.log(`  Contents: ${inspected.manifest.entries
         .map((entry) => `${entry.path} (${(0, workflow_1.formatBytes)(entry.size)})`)
@@ -47,7 +54,6 @@ async function runInspect(archivePath, options) {
         }
     }
     if (!hasComparison(inspected)) {
-        console.log("  Confidence: manifest read directly from the packaged archive.");
         console.log(`  Next: run openclaw-skillkit inspect ${inspected.archivePath} --source ./path-to-skill to check for drift.`);
     }
     if (reportPath) {
@@ -62,4 +68,14 @@ function formatInspectStatus(result) {
         return "ARCHIVE VERIFIED";
     }
     return result.comparison.matches ? "ARCHIVE MATCHES SOURCE" : "DRIFT DETECTED";
+}
+function formatAssessment(status) {
+    switch (status) {
+        case "pass":
+            return "PASS";
+        case "warn":
+            return "ATTN";
+        default:
+            return "FAIL";
+    }
 }

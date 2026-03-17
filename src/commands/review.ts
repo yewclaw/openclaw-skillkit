@@ -1,4 +1,10 @@
-import { buildReviewReport, reviewSkill, type ReviewReadiness, writeReviewReport } from "../lib/workflow";
+import {
+  buildReviewReport,
+  reviewSkill,
+  summarizeReviewReadiness,
+  type ReviewReadiness,
+  writeReviewReport
+} from "../lib/workflow";
 
 export interface RunReviewOptions {
   outputPath?: string;
@@ -9,6 +15,7 @@ export interface RunReviewOptions {
 export async function runReview(targetDir: string, options: RunReviewOptions): Promise<number> {
   const review = await reviewSkill(targetDir, options.outputPath);
   const reportPath = await writeReviewReport(review, options.reportPath);
+  const summary = summarizeReviewReadiness(review);
 
   if (options.format === "json") {
     console.log(
@@ -16,6 +23,7 @@ export async function runReview(targetDir: string, options: RunReviewOptions): P
         {
           skillDir: review.skillDir,
           readiness: review.readiness,
+          releaseSummary: summary,
           reportPath,
           reportMarkdown: buildReviewReport(review),
           lint: review.lint,
@@ -30,10 +38,16 @@ export async function runReview(targetDir: string, options: RunReviewOptions): P
 
   console.log(`Reviewing ${review.skillDir}`);
   console.log(`  Readiness: ${formatReadinessLabel(review.readiness)}`);
+  console.log(`  Summary: ${summary.headline}`);
   console.log(
     `  Lint: ${review.lint.summary.errors} error(s), ${review.lint.summary.warnings} warning(s) across ${review.lint.fileCount} file(s).`
   );
-  console.log(`  Confidence: ${formatReviewConfidence(review)}`);
+  console.log(`  Confidence: ${summary.confidence}`);
+  console.log(
+    `  Release checks: ${summary.checks
+      .map((check) => `${formatAssessment(check.status)} ${check.label.toLowerCase()} (${check.detail})`)
+      .join("; ")}`
+  );
 
   if (review.lint.focusAreas.length > 0) {
     console.log(
@@ -85,21 +99,13 @@ function formatReadinessLabel(readiness: ReviewReadiness): string {
   }
 }
 
-function formatReviewConfidence(review: {
-  readiness: ReviewReadiness;
-  archive?: { comparison: { matches: boolean } };
-}): string {
-  if (review.readiness === "ready") {
-    return "lint passed cleanly, the archive was created, and the artifact matches the source.";
+function formatAssessment(status: "pass" | "warn" | "fail"): string {
+  switch (status) {
+    case "pass":
+      return "PASS";
+    case "warn":
+      return "ATTN";
+    default:
+      return "FAIL";
   }
-
-  if (review.readiness === "ready-with-warnings") {
-    return "the skill can ship, but warnings still deserve a final pass before handoff.";
-  }
-
-  if (review.archive?.comparison.matches === false) {
-    return "the packaged artifact no longer matches the current source.";
-  }
-
-  return "blocking issues remain, so this skill should not be handed off yet.";
 }

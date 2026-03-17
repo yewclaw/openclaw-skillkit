@@ -293,6 +293,8 @@ Adding `--source` compares the archive to a current skill directory so you can c
 - files missing from the current source
 - new source files not present in the archive
 
+The text, JSON, Studio, and Markdown report outputs now all include the same trust summary so reviewers can quickly see whether the manifest was verified, whether metadata still matches, and whether the archive still reflects the current source.
+
 Adding `--report` exports the same inspection as a Markdown review artifact that is easier to attach to release notes, share in PRs, or hand to reviewers who do not want raw JSON.
 
 ### 5. Run a release-readiness review before handoff
@@ -311,6 +313,8 @@ openclaw-skillkit review skills/customer-support --json
 ```
 
 If blocking lint errors remain, `review` exits non-zero and does not create an archive. When the skill is ready, the report captures both authoring quality and artifact trust in one place.
+
+That review output now includes a small release scorecard across CLI, Studio, JSON, and exported Markdown so the handoff answer is explicit: what passed, what needs attention, and whether the shipped artifact is still trustworthy.
 
 ## Commands
 

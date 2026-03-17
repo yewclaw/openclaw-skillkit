@@ -402,8 +402,10 @@ serialTest("cli inspect reads the embedded archive manifest", async () => {
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Inspecting /);
   assert.match(result.stdout, /Status: ARCHIVE VERIFIED/);
+  assert.match(result.stdout, /Trust: Archive manifest verified/);
   assert.match(result.stdout, /Skill: weather-research@1\.2\.3/);
   assert.match(result.stdout, /Description: Skill for structured weather research/);
+  assert.match(result.stdout, /Checks: PASS manifest/);
   assert.match(result.stdout, /Contents: SKILL\.md \(\d+ B\), assets\/README\.txt/);
   assert.match(result.stdout, /Next: run openclaw-skillkit inspect .* --source \.\/path-to-skill to check for drift\./);
 });
@@ -421,6 +423,7 @@ serialTest("cli inspect supports json output", async () => {
   assert.equal(result.code, 0, result.stderr);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.archivePath, outputPath);
+  assert.equal(payload.trustSummary.status, "verified");
   assert.equal(payload.manifest.skill.version, "1.2.3");
   assert.equal(payload.manifest.entryCount, 4);
   assert.match(payload.reportMarkdown, /# OpenClaw Skill Archive Report/);
@@ -440,6 +443,7 @@ serialTest("cli inspect can compare an archive against its source directory", as
 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Comparison: drift detected/);
+  assert.match(result.stdout, /Trust: Artifact drift detected/);
   assert.match(result.stdout, /Changed: references\/README\.md \(size-mismatch,/);
 });
 
@@ -459,6 +463,7 @@ serialTest("cli inspect can export a markdown drift report", async () => {
   assert.match(result.stdout, /Report: /);
   const reportPath = path.join(tempDir, "artifact.report.md");
   const report = await fs.readFile(reportPath, "utf8");
+  assert.match(report, /## Trust Summary/);
   assert.match(report, /Status: drift detected/);
   assert.match(report, /### Changed Files/);
   assert.match(report, /references\/README\.md/);
@@ -475,11 +480,14 @@ serialTest("cli review packages a valid skill and reports readiness", async () =
 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Readiness: READY TO SHIP/);
+  assert.match(result.stdout, /Summary: Ready to ship/);
+  assert.match(result.stdout, /Release checks: PASS lint/);
   assert.match(result.stdout, /Artifact check: matches source/);
   assert.match(result.stdout, /Report: /);
   await fs.access(outputPath);
   const report = await fs.readFile(reportPath, "utf8");
   assert.match(report, /# OpenClaw Skill Review Report/);
+  assert.match(report, /## Release Summary/);
   assert.match(report, /Verdict: ready to ship/);
 });
 
@@ -494,6 +502,7 @@ serialTest("cli review stops before packaging when the skill is not ready", asyn
   assert.equal(result.code, 1);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.readiness, "not-ready");
+  assert.equal(payload.releaseSummary.headline, "Not ready to ship");
   assert.equal(payload.archive, undefined);
   await assert.rejects(fs.access(outputPath));
 });

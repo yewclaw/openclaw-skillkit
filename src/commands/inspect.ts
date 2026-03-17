@@ -4,6 +4,7 @@ import {
   compareArchiveToSource,
   formatBytes,
   inspectSkillArchive,
+  summarizeArchiveTrust,
   writeArchiveReport
 } from "../lib/workflow";
 
@@ -18,12 +19,14 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
     ? await compareArchiveToSource(archivePath, options.sourceDir)
     : await inspectSkillArchive(archivePath);
   const reportPath = await writeArchiveReport(inspected.archivePath, inspected, options.reportPath);
+  const trust = summarizeArchiveTrust(inspected);
 
   if (options.format === "json") {
     console.log(
       JSON.stringify(
         {
           archivePath: inspected.archivePath,
+          trustSummary: trust,
           manifest: inspected.manifest,
           reportPath,
           reportMarkdown: buildArchiveReport(inspected),
@@ -38,8 +41,15 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
 
   console.log(`Inspecting ${inspected.archivePath}`);
   console.log(`  Status: ${formatInspectStatus(inspected)}`);
+  console.log(`  Trust: ${trust.headline}`);
   console.log(`  Skill: ${inspected.manifest.skill.name}@${inspected.manifest.skill.version}`);
   console.log(`  Description: ${inspected.manifest.skill.description}`);
+  console.log(`  Confidence: ${trust.confidence}`);
+  console.log(
+    `  Checks: ${trust.checks
+      .map((check) => `${formatAssessment(check.status)} ${check.label.toLowerCase()} (${check.detail})`)
+      .join("; ")}`
+  );
   console.log(
     `  Entries: ${inspected.manifest.entryCount} bundled file(s), ${formatBytes(inspected.manifest.totalBytes)} before manifest.`
   );
@@ -82,7 +92,6 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
   }
 
   if (!hasComparison(inspected)) {
-    console.log("  Confidence: manifest read directly from the packaged archive.");
     console.log(`  Next: run openclaw-skillkit inspect ${inspected.archivePath} --source ./path-to-skill to check for drift.`);
   }
 
@@ -103,4 +112,15 @@ function formatInspectStatus(result: { comparison?: ArchiveSourceComparison }): 
   }
 
   return result.comparison.matches ? "ARCHIVE MATCHES SOURCE" : "DRIFT DETECTED";
+}
+
+function formatAssessment(status: "pass" | "warn" | "fail"): string {
+  switch (status) {
+    case "pass":
+      return "PASS";
+    case "warn":
+      return "ATTN";
+    default:
+      return "FAIL";
+  }
 }

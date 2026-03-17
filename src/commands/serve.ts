@@ -13,7 +13,9 @@ import {
   listExampleSkills,
   packSkill,
   reviewSkill,
+  summarizeArchiveTrust,
   summarizeFocusAreas,
+  summarizeReviewReadiness,
   summarizeLintResult
 } from "../lib/workflow";
 
@@ -187,6 +189,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
 
       sendJson(response, 200, {
         ...review,
+        releaseSummary: summarizeReviewReadiness(review),
         reportMarkdown: buildReviewReport(review)
       });
       return;
@@ -202,6 +205,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
 
       sendJson(response, 200, {
         ...inspected,
+        trustSummary: summarizeArchiveTrust(inspected),
         reportMarkdown: buildArchiveReport(inspected)
       });
       return;
@@ -441,6 +445,7 @@ Expected outcome:
           <pre id="pack-result" class="result-card muted">Pack output will appear here.
 
 When packaging succeeds, the inspect form will be prefilled automatically and the next inspect command will be obvious.</pre>
+          <div id="review-summary" class="summary-grid"></div>
           <pre id="review-result" class="result-card muted">Review output will appear here.
 
 Use this when you want one release-readiness verdict with lint, packaging, and artifact checks together.</pre>
@@ -466,6 +471,7 @@ Use this when you want one release-readiness verdict with lint, packaging, and a
             <input id="inspect-source-input" placeholder="./examples/weather-research-skill" />
             <small>Optional. Detect drift between the packaged artifact and the current skill directory.</small>
           </label>
+          <div id="inspect-summary" class="summary-grid"></div>
           <pre id="inspect-result" class="result-card muted">Manifest details will appear here.
 
 Use this after packaging to verify the final archive contents, metadata, and source-to-artifact drift.</pre>
@@ -850,6 +856,49 @@ button:disabled {
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 }
 
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.summary-card {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(23, 32, 25, 0.06);
+  border: 1px solid rgba(36, 42, 36, 0.08);
+}
+
+.summary-card strong,
+.summary-card span {
+  display: block;
+}
+
+.summary-label {
+  margin-bottom: 6px;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.summary-value {
+  font-weight: 700;
+}
+
+.summary-value.pass {
+  color: var(--accent-strong);
+}
+
+.summary-value.warn {
+  color: #915f08;
+}
+
+.summary-value.fail {
+  color: var(--danger);
+}
+
 .result-card.muted {
   color: #bac8bb;
 }
@@ -912,6 +961,8 @@ const lintResult = document.querySelector("#lint-result");
 const packResult = document.querySelector("#pack-result");
 const reviewResult = document.querySelector("#review-result");
 const inspectResult = document.querySelector("#inspect-result");
+const reviewSummary = document.querySelector("#review-summary");
+const inspectSummary = document.querySelector("#inspect-summary");
 const packButton = document.querySelector("#pack-button");
 const reviewButton = document.querySelector("#review-button");
 const statusTitle = document.querySelector("#status-title");
@@ -1109,6 +1160,7 @@ reviewButton.addEventListener("click", async () => {
       inspectSourceInput.value = result.skillDir;
     }
 
+    renderSummaryCards(reviewSummary, buildReviewSummaryCards(result));
     renderResult(reviewResult, formatReviewResult(result), result.readiness === "not-ready");
     setStatus(
       result.readiness === "ready"
@@ -1122,6 +1174,7 @@ reviewButton.addEventListener("click", async () => {
       result.readiness === "not-ready" ? "error" : "ok"
     );
   } catch (error) {
+    renderSummaryCards(reviewSummary, []);
     renderResult(reviewResult, error.message, true);
     setStatus("Review failed", error.message, "error");
   } finally {
@@ -1139,6 +1192,7 @@ inspectForm.addEventListener("submit", async (event) => {
       archivePath: archivePathInput.value,
       sourceDir: inspectSourceInput.value || undefined
     });
+    renderSummaryCards(inspectSummary, buildInspectSummaryCards(result));
     renderResult(inspectResult, formatInspectResult(result));
     setStatus(
       result.comparison && !result.comparison.matches ? "Artifact drift detected" : "Archive inspected",
@@ -1150,6 +1204,7 @@ inspectForm.addEventListener("submit", async (event) => {
       result.comparison && !result.comparison.matches ? "error" : "ok"
     );
   } catch (error) {
+    renderSummaryCards(inspectSummary, []);
     renderResult(inspectResult, error.message, true);
     setStatus("Inspect failed", error.message, "error");
   } finally {
@@ -1248,14 +1303,21 @@ function formatInspectResult(result) {
   const lines = [
     result.comparison ? result.comparison.matches ? "ARCHIVE MATCHES SOURCE" : "DRIFT DETECTED" : "ARCHIVE VERIFIED",
     "",
+    "Trust: " + result.trustSummary.headline,
     "Archive: " + result.archivePath,
     "Manifest schema: v" + manifest.schemaVersion,
     "Skill: " + manifest.skill.name + "@" + manifest.skill.version,
     "Description: " + manifest.skill.description,
     "Packaged at: " + manifest.packagedAt,
     "Entries: " + manifest.entryCount,
+    "Confidence: " + result.trustSummary.confidence,
     ""
   ];
+
+  lines.push("Checks:");
+  for (const check of result.trustSummary.checks) {
+    lines.push("- " + formatAssessment(check.status) + " " + check.label + ": " + check.detail);
+  }
 
   for (const entry of manifest.entries) {
     lines.push("- " + entry.path + " (" + entry.size + " B, sha256 " + (entry.sha256 ? entry.sha256.slice(0, 12) : "n/a") + "...)");
@@ -1315,10 +1377,16 @@ function formatReviewResult(result) {
     "",
     "Directory: " + result.skillDir,
     "Verdict: " + formatReadiness(result.readiness),
+    "Summary: " + result.releaseSummary.headline,
     "Lint summary: " + result.lint.summary.errors + " error(s), " + result.lint.summary.warnings + " warning(s)",
     "Files checked: " + result.lint.fileCount,
-    "Confidence: " + formatReviewConfidence(result)
+    "Confidence: " + result.releaseSummary.confidence
   ];
+
+  lines.push("", "Release checks:");
+  for (const check of result.releaseSummary.checks) {
+    lines.push("- " + formatAssessment(check.status) + " " + check.label + ": " + check.detail);
+  }
 
   if (result.lint.focusAreas.length) {
     lines.push("", "Focus areas:");
@@ -1368,6 +1436,20 @@ function renderResult(element, text, isError = false) {
   element.classList.remove("muted");
 }
 
+function renderSummaryCards(element, cards) {
+  if (!element) {
+    return;
+  }
+
+  element.innerHTML = cards.map((card) =>
+    '<article class="summary-card">' +
+      '<span class="summary-label">' + escapeHtml(card.label) + '</span>' +
+      '<strong class="summary-value ' + escapeHtml(card.tone) + '">' + escapeHtml(card.value) + '</strong>' +
+      '<span>' + escapeHtml(card.detail) + '</span>' +
+    '</article>'
+  ).join("");
+}
+
 function setStatus(title, body, tone) {
   statusTitle.textContent = title;
   statusBody.textContent = body;
@@ -1413,19 +1495,47 @@ function formatReadiness(readiness) {
   return "not ready";
 }
 
-function formatReviewConfidence(result) {
-  if (result.readiness === "ready") {
-    return "lint passed cleanly, the archive was created, and the artifact matches the source.";
+function buildReviewSummaryCards(result) {
+  return [
+    {
+      label: "Verdict",
+      value: result.releaseSummary.headline,
+      detail: result.releaseSummary.confidence,
+      tone: result.readiness === "ready" ? "pass" : result.readiness === "ready-with-warnings" ? "warn" : "fail"
+    }
+  ].concat(result.releaseSummary.checks.map((check) => ({
+    label: check.label,
+    value: formatAssessment(check.status),
+    detail: check.detail,
+    tone: check.status
+  })));
+}
+
+function buildInspectSummaryCards(result) {
+  return [
+    {
+      label: "Trust",
+      value: result.trustSummary.headline,
+      detail: result.trustSummary.confidence,
+      tone: result.trustSummary.status === "matching-source" ? "pass" : result.trustSummary.status === "verified" ? "warn" : "fail"
+    }
+  ].concat(result.trustSummary.checks.map((check) => ({
+    label: check.label,
+    value: formatAssessment(check.status),
+    detail: check.detail,
+    tone: check.status
+  })));
+}
+
+function formatAssessment(status) {
+  if (status === "pass") {
+    return "PASS";
   }
 
-  if (result.readiness === "ready-with-warnings") {
-    return "the skill can ship, but warnings still deserve a final pass.";
+  if (status === "warn") {
+    return "ATTN";
   }
 
-  if (result.archive && result.archive.comparison && !result.archive.comparison.matches) {
-    return "the packaged artifact differs from the current source.";
-  }
-
-  return "blocking issues remain, so the skill is not ready to hand off.";
+  return "FAIL";
 }
 `;

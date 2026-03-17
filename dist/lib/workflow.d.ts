@@ -78,6 +78,24 @@ export interface InspectedArchiveResult {
     manifest: SkillArchiveManifest;
     comparison?: ArchiveSourceComparison;
 }
+export type AssessmentStatus = "pass" | "warn" | "fail";
+export interface AssessmentCheck {
+    label: string;
+    status: AssessmentStatus;
+    detail: string;
+}
+export interface ArchiveTrustSummary {
+    status: "verified" | "matching-source" | "drift-detected";
+    headline: string;
+    confidence: string;
+    checks: AssessmentCheck[];
+    nextStep?: string;
+}
+export interface ReviewSummary {
+    headline: string;
+    confidence: string;
+    checks: AssessmentCheck[];
+}
 export declare function summarizeLintResult(result: LintResult): LintSummary;
 export declare function summarizeFocusAreas(result: LintResult): FocusAreaSummary[];
 export declare function buildActionPlan(result: LintResult, resolvedDir: string): string[];
@@ -96,4 +114,6 @@ export declare function writeArchiveReport(archivePath: string, result: Inspecte
 export declare function writeReviewReport(review: SkillReviewResult, requestedPath?: string | boolean): Promise<string | undefined>;
 export declare function buildArchiveReport(result: InspectedArchiveResult): string;
 export declare function buildReviewReport(review: SkillReviewResult): string;
+export declare function summarizeArchiveTrust(result: InspectedArchiveResult): ArchiveTrustSummary;
+export declare function summarizeReviewReadiness(review: SkillReviewResult): ReviewSummary;
 export declare function listExampleSkills(repoRoot?: string): Promise<ExampleSkillSummary[]>;

@@ -5,10 +5,12 @@ const workflow_1 = require("../lib/workflow");
 async function runReview(targetDir, options) {
     const review = await (0, workflow_1.reviewSkill)(targetDir, options.outputPath);
     const reportPath = await (0, workflow_1.writeReviewReport)(review, options.reportPath);
+    const summary = (0, workflow_1.summarizeReviewReadiness)(review);
     if (options.format === "json") {
         console.log(JSON.stringify({
             skillDir: review.skillDir,
             readiness: review.readiness,
+            releaseSummary: summary,
             reportPath,
             reportMarkdown: (0, workflow_1.buildReviewReport)(review),
             lint: review.lint,
@@ -18,8 +20,12 @@ async function runReview(targetDir, options) {
     }
     console.log(`Reviewing ${review.skillDir}`);
     console.log(`  Readiness: ${formatReadinessLabel(review.readiness)}`);
+    console.log(`  Summary: ${summary.headline}`);
     console.log(`  Lint: ${review.lint.summary.errors} error(s), ${review.lint.summary.warnings} warning(s) across ${review.lint.fileCount} file(s).`);
-    console.log(`  Confidence: ${formatReviewConfidence(review)}`);
+    console.log(`  Confidence: ${summary.confidence}`);
+    console.log(`  Release checks: ${summary.checks
+        .map((check) => `${formatAssessment(check.status)} ${check.label.toLowerCase()} (${check.detail})`)
+        .join("; ")}`);
     if (review.lint.focusAreas.length > 0) {
         console.log(`  Focus areas: ${review.lint.focusAreas
             .map((area) => `${area.label} (${area.errors} error(s), ${area.warnings} warning(s))`)
@@ -60,15 +66,13 @@ function formatReadinessLabel(readiness) {
             return "NOT READY";
     }
 }
-function formatReviewConfidence(review) {
-    if (review.readiness === "ready") {
-        return "lint passed cleanly, the archive was created, and the artifact matches the source.";
+function formatAssessment(status) {
+    switch (status) {
+        case "pass":
+            return "PASS";
+        case "warn":
+            return "ATTN";
+        default:
+            return "FAIL";
     }
-    if (review.readiness === "ready-with-warnings") {
-        return "the skill can ship, but warnings still deserve a final pass before handoff.";
-    }
-    if (review.archive?.comparison.matches === false) {
-        return "the packaged artifact no longer matches the current source.";
-    }
-    return "blocking issues remain, so this skill should not be handed off yet.";
 }

@@ -18,6 +18,8 @@ exports.writeArchiveReport = writeArchiveReport;
 exports.writeReviewReport = writeReviewReport;
 exports.buildArchiveReport = buildArchiveReport;
 exports.buildReviewReport = buildReviewReport;
+exports.summarizeArchiveTrust = summarizeArchiveTrust;
+exports.summarizeReviewReadiness = summarizeReviewReadiness;
 exports.listExampleSkills = listExampleSkills;
 const node_path_1 = __importDefault(require("node:path"));
 const node_crypto_1 = require("node:crypto");
@@ -289,22 +291,25 @@ async function writeReviewReport(review, requestedPath) {
 }
 function buildArchiveReport(result) {
     const generatedAt = new Date().toISOString();
+    const trust = summarizeArchiveTrust(result);
     const lines = [
         "# OpenClaw Skill Archive Report",
         "",
         `Generated: ${generatedAt}`,
         "",
-        "## Archive",
-        `- Archive: ${result.archivePath}`,
-        `- Skill: ${result.manifest.skill.name}@${result.manifest.skill.version}`,
-        `- Description: ${result.manifest.skill.description}`,
-        `- Packaged at: ${result.manifest.packagedAt}`,
-        `- Manifest schema: v${result.manifest.schemaVersion}`,
-        `- Bundled files: ${result.manifest.entryCount}`,
-        `- Total bundled bytes: ${formatBytes(result.manifest.totalBytes)}`,
+        "## Trust Summary",
+        `- Headline: ${trust.headline}`,
+        `- Confidence: ${trust.confidence}`,
         "",
-        "## Contents"
+        "### Checks"
     ];
+    for (const check of trust.checks) {
+        lines.push(`- ${formatAssessmentStatus(check.status)} ${check.label}: ${check.detail}`);
+    }
+    if (trust.nextStep) {
+        lines.push(`- Next step: ${trust.nextStep}`);
+    }
+    lines.push("", "## Archive", `- Archive: ${result.archivePath}`, `- Skill: ${result.manifest.skill.name}@${result.manifest.skill.version}`, `- Description: ${result.manifest.skill.description}`, `- Packaged at: ${result.manifest.packagedAt}`, `- Manifest schema: v${result.manifest.schemaVersion}`, `- Bundled files: ${result.manifest.entryCount}`, `- Total bundled bytes: ${formatBytes(result.manifest.totalBytes)}`, "", "## Contents");
     for (const entry of result.manifest.entries) {
         lines.push(`- \`${entry.path}\` (${formatBytes(entry.size)}, sha256 \`${entry.sha256 ?? "n/a"}\`)`);
     }
@@ -344,17 +349,22 @@ function buildArchiveReport(result) {
     return lines.join("\n");
 }
 function buildReviewReport(review) {
+    const summary = summarizeReviewReadiness(review);
     const lines = [
         "# OpenClaw Skill Review Report",
         "",
         `Generated: ${new Date().toISOString()}`,
         "",
-        "## Readiness",
-        `- Skill directory: ${review.skillDir}`,
-        `- Verdict: ${formatReviewReadiness(review.readiness)}`,
-        `- Files checked: ${review.lint.fileCount}`,
-        `- Lint summary: ${review.lint.summary.errors} error(s), ${review.lint.summary.warnings} warning(s)`
+        "## Release Summary",
+        `- Headline: ${summary.headline}`,
+        `- Confidence: ${summary.confidence}`,
+        "",
+        "### Checks"
     ];
+    for (const check of summary.checks) {
+        lines.push(`- ${formatAssessmentStatus(check.status)} ${check.label}: ${check.detail}`);
+    }
+    lines.push("", "## Readiness", `- Skill directory: ${review.skillDir}`, `- Verdict: ${formatReviewReadiness(review.readiness)}`, `- Files checked: ${review.lint.fileCount}`, `- Lint summary: ${review.lint.summary.errors} error(s), ${review.lint.summary.warnings} warning(s)`);
     if (review.lint.focusAreas.length > 0) {
         lines.push("", "## Focus Areas");
         for (const area of review.lint.focusAreas) {
@@ -387,6 +397,131 @@ function buildReviewReport(review) {
         review.lint.nextSteps.forEach((step, index) => lines.push(`${index + 1}. ${step}`));
     }
     return lines.join("\n");
+}
+function summarizeArchiveTrust(result) {
+    const checks = [
+        {
+            label: "Manifest",
+            status: "pass",
+            detail: `embedded manifest loaded from the packaged archive (schema v${result.manifest.schemaVersion})`
+        },
+        {
+            label: "Contents",
+            status: "pass",
+            detail: `${result.manifest.entryCount} bundled file(s), ${formatBytes(result.manifest.totalBytes)} before manifest`
+        }
+    ];
+    if (!result.comparison) {
+        return {
+            status: "verified",
+            headline: "Archive manifest verified",
+            confidence: "The packaged artifact includes a readable manifest, but source parity has not been checked yet.",
+            checks,
+            nextStep: `openclaw-skillkit inspect ${result.archivePath} --source ./path-to-skill`
+        };
+    }
+    const comparison = result.comparison;
+    checks.push({
+        label: "Metadata",
+        status: comparison.metadataMatches ? "pass" : "fail",
+        detail: comparison.metadataMatches
+            ? "archive metadata matches the selected source skill"
+            : `${comparison.metadataDifferences.length} metadata field(s) drifted`
+    });
+    checks.push({
+        label: "Source parity",
+        status: comparison.matches ? "pass" : "fail",
+        detail: comparison.matches
+            ? `${comparison.matchedEntries}/${comparison.entryCount} archive entries match the source`
+            : buildParityDetail(comparison)
+    });
+    if (comparison.matches) {
+        return {
+            status: "matching-source",
+            headline: "Archive matches source",
+            confidence: "The embedded manifest, metadata, and bundled files all align with the selected source directory.",
+            checks
+        };
+    }
+    return {
+        status: "drift-detected",
+        headline: "Artifact drift detected",
+        confidence: "The packaged artifact no longer reflects the selected source directory, so it should be re-packed before handoff.",
+        checks
+    };
+}
+function summarizeReviewReadiness(review) {
+    const checks = [
+        {
+            label: "Lint",
+            status: review.lint.summary.errors > 0 ? "fail" : review.lint.summary.warnings > 0 ? "warn" : "pass",
+            detail: review.lint.summary.errors > 0
+                ? `${review.lint.summary.errors} blocking error(s), ${review.lint.summary.warnings} warning(s)`
+                : review.lint.summary.warnings > 0
+                    ? `${review.lint.summary.warnings} warning(s) remain`
+                    : "no blocking errors or warnings"
+        },
+        {
+            label: "Focus areas",
+            status: review.lint.focusAreas.some((area) => area.errors > 0) ? "fail" : review.lint.focusAreas.length > 0 ? "warn" : "pass",
+            detail: review.lint.focusAreas.length > 0
+                ? review.lint.focusAreas
+                    .slice(0, 2)
+                    .map((area) => `${area.label.toLowerCase()} ${area.errors}/${area.warnings}`)
+                    .join(", ")
+                : "no risk clusters detected"
+        }
+    ];
+    if (!review.archive) {
+        checks.push({
+            label: "Archive",
+            status: "fail",
+            detail: "not created because blocking lint errors remain"
+        });
+        return {
+            headline: "Not ready to ship",
+            confidence: "Blocking lint issues prevent packaging, so there is no trustworthy release artifact yet.",
+            checks
+        };
+    }
+    checks.push({
+        label: "Archive",
+        status: review.archive.warnings.length > 0 ? "warn" : "pass",
+        detail: review.archive.warnings.length > 0
+            ? `${review.archive.warnings.length} packaging warning(s) carried into the artifact`
+            : `created successfully at ${review.archive.destination}`
+    });
+    const trust = summarizeArchiveTrust({
+        archivePath: review.archive.destination,
+        manifest: review.archive.manifest,
+        comparison: review.archive.comparison
+    });
+    checks.push({
+        label: "Artifact trust",
+        status: mapTrustStatusToAssessment(trust.status),
+        detail: trust.headline.toLowerCase()
+    });
+    if (review.readiness === "ready") {
+        return {
+            headline: "Ready to ship",
+            confidence: "Lint passed cleanly, the archive was created, and the packaged artifact still matches the source.",
+            checks
+        };
+    }
+    if (review.readiness === "ready-with-warnings") {
+        return {
+            headline: "Ready with warnings",
+            confidence: "The release is packable and trusted, but warnings still deserve a final pass before handoff.",
+            checks
+        };
+    }
+    return {
+        headline: "Not ready to ship",
+        confidence: review.archive.comparison.matches === false
+            ? "The artifact no longer matches the source, so the release should be rebuilt before handoff."
+            : "Blocking issues remain in the release workflow.",
+        checks
+    };
 }
 async function listExampleSkills(repoRoot = node_path_1.default.resolve(__dirname, "..", "..")) {
     const examplesDir = node_path_1.default.join(repoRoot, "examples");
@@ -543,5 +678,41 @@ function formatReviewReadiness(readiness) {
             return "ready with warnings";
         default:
             return "not ready";
+    }
+}
+function formatAssessmentStatus(status) {
+    switch (status) {
+        case "pass":
+            return "PASS";
+        case "warn":
+            return "ATTN";
+        default:
+            return "FAIL";
+    }
+}
+function buildParityDetail(comparison) {
+    const details = [];
+    if (comparison.changedEntries.length > 0) {
+        details.push(`${comparison.changedEntries.length} changed file(s)`);
+    }
+    if (comparison.missingFromSource.length > 0) {
+        details.push(`${comparison.missingFromSource.length} missing from source`);
+    }
+    if (comparison.extraSourceEntries.length > 0) {
+        details.push(`${comparison.extraSourceEntries.length} new in source`);
+    }
+    if (comparison.metadataDifferences.length > 0) {
+        details.push(`${comparison.metadataDifferences.length} metadata difference(s)`);
+    }
+    return details.join(", ") || `${comparison.matchedEntries}/${comparison.entryCount} entries match`;
+}
+function mapTrustStatusToAssessment(status) {
+    switch (status) {
+        case "verified":
+            return "warn";
+        case "matching-source":
+            return "pass";
+        default:
+            return "fail";
     }
 }
