@@ -26,6 +26,7 @@ test("studio assets expose the local app shell and workflow controls", () => {
   assert.match(assets.js, /api\("\/api\/lint"/);
   assert.match(assets.js, /formatPackResult/);
   assert.match(assets.js, /compareArchiveToSource|source comparison/i);
+  assert.match(assets.js, /Release report:/);
   assert.match(assets.js, /setStatus\("Ready to author"/);
   assert.match(assets.js, /Recommended command:/);
 });

@@ -1,19 +1,23 @@
 import {
+  buildArchiveReport,
   type ArchiveSourceComparison,
   compareArchiveToSource,
   formatBytes,
-  inspectSkillArchive
+  inspectSkillArchive,
+  writeArchiveReport
 } from "../lib/workflow";
 
 export interface RunInspectOptions {
   format: "text" | "json";
   sourceDir?: string;
+  reportPath?: string | boolean;
 }
 
 export async function runInspect(archivePath: string, options: RunInspectOptions): Promise<void> {
   const inspected = options.sourceDir
     ? await compareArchiveToSource(archivePath, options.sourceDir)
     : await inspectSkillArchive(archivePath);
+  const reportPath = await writeArchiveReport(inspected.archivePath, inspected, options.reportPath);
 
   if (options.format === "json") {
     console.log(
@@ -21,6 +25,8 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
         {
           archivePath: inspected.archivePath,
           manifest: inspected.manifest,
+          reportPath,
+          reportMarkdown: buildArchiveReport(inspected),
           comparison: "comparison" in inspected ? inspected.comparison : undefined
         },
         null,
@@ -72,6 +78,10 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
     if (comparison.extraSourceEntries.length > 0) {
       console.log(`  New in source: ${comparison.extraSourceEntries.join(", ")}`);
     }
+  }
+
+  if (reportPath) {
+    console.log(`  Report: ${reportPath}`);
   }
 }
 

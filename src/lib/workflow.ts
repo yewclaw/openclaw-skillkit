@@ -1,7 +1,7 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { ensureDir, exists, listFilesRecursive, readTextFile } from "./fs";
+import { ensureDir, exists, listFilesRecursive, readTextFile, writeTextFile } from "./fs";
 import { parseFrontmatter } from "./frontmatter";
 import { type LintResult, lintSkill } from "./skill";
 import { createSkillArchive, readArchiveManifest, type SkillArchiveManifest } from "./zip";
@@ -59,6 +59,12 @@ export interface ArchiveSourceComparison {
     archiveValue: string;
     sourceValue: string;
   }>;
+}
+
+export interface InspectedArchiveResult {
+  archivePath: string;
+  manifest: SkillArchiveManifest;
+  comparison?: ArchiveSourceComparison;
 }
 
 export function summarizeLintResult(result: LintResult): LintSummary {
@@ -201,7 +207,7 @@ export async function packSkill(targetDir: string, outputPath?: string): Promise
 
 export async function inspectSkillArchive(
   archivePath: string
-): Promise<{ archivePath: string; manifest: SkillArchiveManifest }> {
+): Promise<InspectedArchiveResult> {
   const resolvedArchivePath = path.resolve(archivePath);
   const manifest = await readArchiveManifest(resolvedArchivePath);
 
@@ -214,7 +220,7 @@ export async function inspectSkillArchive(
 export async function compareArchiveToSource(
   archivePath: string,
   sourceDir: string
-): Promise<{ archivePath: string; manifest: SkillArchiveManifest; comparison: ArchiveSourceComparison }> {
+): Promise<InspectedArchiveResult> {
   const inspected = await inspectSkillArchive(archivePath);
   const resolvedSourceDir = path.resolve(sourceDir);
   const sourceSkillFile = path.join(resolvedSourceDir, "SKILL.md");
@@ -300,6 +306,112 @@ export async function compareArchiveToSource(
       metadataDifferences
     }
   };
+}
+
+export function resolveArchiveReportPath(archivePath: string, requestedPath?: string | boolean): string | undefined {
+  if (!requestedPath) {
+    return undefined;
+  }
+
+  if (requestedPath === true) {
+    return path.resolve(defaultArchiveReportFileName(archivePath));
+  }
+
+  return path.resolve(requestedPath);
+}
+
+export async function writeArchiveReport(
+  archivePath: string,
+  result: InspectedArchiveResult,
+  requestedPath?: string | boolean
+): Promise<string | undefined> {
+  const reportPath = resolveArchiveReportPath(archivePath, requestedPath);
+  if (!reportPath) {
+    return undefined;
+  }
+
+  await writeTextFile(reportPath, buildArchiveReport(result));
+  return reportPath;
+}
+
+export function buildArchiveReport(result: InspectedArchiveResult): string {
+  const generatedAt = new Date().toISOString();
+  const lines = [
+    "# OpenClaw Skill Archive Report",
+    "",
+    `Generated: ${generatedAt}`,
+    "",
+    "## Archive",
+    `- Archive: ${result.archivePath}`,
+    `- Skill: ${result.manifest.skill.name}@${result.manifest.skill.version}`,
+    `- Description: ${result.manifest.skill.description}`,
+    `- Packaged at: ${result.manifest.packagedAt}`,
+    `- Manifest schema: v${result.manifest.schemaVersion}`,
+    `- Bundled files: ${result.manifest.entryCount}`,
+    `- Total bundled bytes: ${formatBytes(result.manifest.totalBytes)}`,
+    "",
+    "## Contents"
+  ];
+
+  for (const entry of result.manifest.entries) {
+    lines.push(`- \`${entry.path}\` (${formatBytes(entry.size)}, sha256 \`${entry.sha256 ?? "n/a"}\`)`);
+  }
+
+  lines.push("", "## Review Status");
+
+  if (result.comparison) {
+    lines.push(
+      `- Source: ${result.comparison.sourceDir}`,
+      `- Compared at: ${result.comparison.comparedAt}`,
+      `- Status: ${result.comparison.matches ? "matches source" : "drift detected"}`,
+      `- Matched archive entries: ${result.comparison.matchedEntries}/${result.comparison.entryCount}`
+    );
+
+    if (result.comparison.metadataDifferences.length > 0) {
+      lines.push("", "### Metadata Drift");
+      for (const difference of result.comparison.metadataDifferences) {
+        lines.push(
+          `- ${difference.field}: archive="${difference.archiveValue}" source="${difference.sourceValue}"`
+        );
+      }
+    }
+
+    if (result.comparison.changedEntries.length > 0) {
+      lines.push("", "### Changed Files");
+      for (const entry of result.comparison.changedEntries) {
+        lines.push(
+          `- ${entry.path}: ${entry.reason} (archive ${formatBytes(entry.archiveSize)}, source ${formatBytes(entry.sourceSize)})`
+        );
+      }
+    }
+
+    if (result.comparison.missingFromSource.length > 0) {
+      lines.push("", "### Missing From Source");
+      for (const entry of result.comparison.missingFromSource) {
+        lines.push(`- ${entry}`);
+      }
+    }
+
+    if (result.comparison.extraSourceEntries.length > 0) {
+      lines.push("", "### New In Source");
+      for (const entry of result.comparison.extraSourceEntries) {
+        lines.push(`- ${entry}`);
+      }
+    }
+  } else {
+    lines.push(`- Status: packaged artifact reviewed without source comparison`);
+    lines.push(`- Next: run \`openclaw-skillkit inspect ${result.archivePath} --source ./path-to-skill\` to include drift status`);
+  }
+
+  lines.push(
+    "",
+    "## Reviewer Checklist",
+    "- Confirm the skill name, version, and description match the release you intend to share.",
+    "- Confirm every referenced helper file is bundled in the archive contents above.",
+    "- If source comparison was included, resolve any reported drift before publication."
+  );
+
+  return lines.join("\n");
 }
 
 export async function listExampleSkills(repoRoot = path.resolve(__dirname, "..", "..")): Promise<ExampleSkillSummary[]> {
@@ -408,4 +520,13 @@ function compareMetadataField(
     archiveValue,
     sourceValue: normalizedSourceValue
   };
+}
+
+function defaultArchiveReportFileName(archivePath: string): string {
+  const resolvedArchivePath = path.resolve(archivePath);
+  if (resolvedArchivePath.endsWith(".skill")) {
+    return `${resolvedArchivePath.slice(0, -".skill".length)}.report.md`;
+  }
+
+  return `${resolvedArchivePath}.report.md`;
 }

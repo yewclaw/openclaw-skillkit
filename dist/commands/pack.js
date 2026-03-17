@@ -4,6 +4,10 @@ exports.runPack = runPack;
 const workflow_1 = require("../lib/workflow");
 async function runPack(targetDir, options) {
     const packResult = await (0, workflow_1.packSkill)(targetDir, options.outputPath);
+    const reportPath = await (0, workflow_1.writeArchiveReport)(packResult.destination, {
+        archivePath: packResult.destination,
+        manifest: packResult.manifest
+    }, options.reportPath);
     if (options.format === "text") {
         console.log(`Packing ${packResult.resolvedDir}`);
     }
@@ -23,6 +27,11 @@ async function runPack(targetDir, options) {
     if (options.format === "json") {
         console.log(JSON.stringify({
             archivePath: packResult.destination,
+            reportPath,
+            reportMarkdown: (0, workflow_1.buildArchiveReport)({
+                archivePath: packResult.destination,
+                manifest: packResult.manifest
+            }),
             normalizedOutputPath: packResult.normalizedOutputPath,
             archiveSizeBytes: packResult.archiveSizeBytes,
             archiveSizeLabel: packResult.archiveSizeLabel,
@@ -36,11 +45,14 @@ async function runPack(targetDir, options) {
         }, null, 2));
         return;
     }
-    printArchiveSummary(packResult.destination, packResult.archiveSizeBytes, packResult.manifest);
+    printArchiveSummary(packResult.destination, packResult.archiveSizeBytes, packResult.manifest, reportPath);
 }
-function printArchiveSummary(destination, archiveSize, manifest) {
+function printArchiveSummary(destination, archiveSize, manifest, reportPath) {
     console.log(`Archive ready: ${destination}`);
     console.log(`  Skill: ${manifest.skill.name}@${manifest.skill.version} (${manifest.entryCount} bundled file(s) plus manifest, ${(0, workflow_1.formatBytes)(archiveSize)}).`);
     console.log(`  Contents: ${manifest.entries.map((entry) => entry.path).join(", ")}`);
     console.log(`  Inspect: openclaw-skillkit inspect ${destination}`);
+    if (reportPath) {
+        console.log(`  Report: ${reportPath}`);
+    }
 }

@@ -11,6 +11,9 @@ exports.resolveArchiveDestination = resolveArchiveDestination;
 exports.packSkill = packSkill;
 exports.inspectSkillArchive = inspectSkillArchive;
 exports.compareArchiveToSource = compareArchiveToSource;
+exports.resolveArchiveReportPath = resolveArchiveReportPath;
+exports.writeArchiveReport = writeArchiveReport;
+exports.buildArchiveReport = buildArchiveReport;
 exports.listExampleSkills = listExampleSkills;
 const node_path_1 = __importDefault(require("node:path"));
 const node_crypto_1 = require("node:crypto");
@@ -207,6 +210,79 @@ async function compareArchiveToSource(archivePath, sourceDir) {
         }
     };
 }
+function resolveArchiveReportPath(archivePath, requestedPath) {
+    if (!requestedPath) {
+        return undefined;
+    }
+    if (requestedPath === true) {
+        return node_path_1.default.resolve(defaultArchiveReportFileName(archivePath));
+    }
+    return node_path_1.default.resolve(requestedPath);
+}
+async function writeArchiveReport(archivePath, result, requestedPath) {
+    const reportPath = resolveArchiveReportPath(archivePath, requestedPath);
+    if (!reportPath) {
+        return undefined;
+    }
+    await (0, fs_1.writeTextFile)(reportPath, buildArchiveReport(result));
+    return reportPath;
+}
+function buildArchiveReport(result) {
+    const generatedAt = new Date().toISOString();
+    const lines = [
+        "# OpenClaw Skill Archive Report",
+        "",
+        `Generated: ${generatedAt}`,
+        "",
+        "## Archive",
+        `- Archive: ${result.archivePath}`,
+        `- Skill: ${result.manifest.skill.name}@${result.manifest.skill.version}`,
+        `- Description: ${result.manifest.skill.description}`,
+        `- Packaged at: ${result.manifest.packagedAt}`,
+        `- Manifest schema: v${result.manifest.schemaVersion}`,
+        `- Bundled files: ${result.manifest.entryCount}`,
+        `- Total bundled bytes: ${formatBytes(result.manifest.totalBytes)}`,
+        "",
+        "## Contents"
+    ];
+    for (const entry of result.manifest.entries) {
+        lines.push(`- \`${entry.path}\` (${formatBytes(entry.size)}, sha256 \`${entry.sha256 ?? "n/a"}\`)`);
+    }
+    lines.push("", "## Review Status");
+    if (result.comparison) {
+        lines.push(`- Source: ${result.comparison.sourceDir}`, `- Compared at: ${result.comparison.comparedAt}`, `- Status: ${result.comparison.matches ? "matches source" : "drift detected"}`, `- Matched archive entries: ${result.comparison.matchedEntries}/${result.comparison.entryCount}`);
+        if (result.comparison.metadataDifferences.length > 0) {
+            lines.push("", "### Metadata Drift");
+            for (const difference of result.comparison.metadataDifferences) {
+                lines.push(`- ${difference.field}: archive="${difference.archiveValue}" source="${difference.sourceValue}"`);
+            }
+        }
+        if (result.comparison.changedEntries.length > 0) {
+            lines.push("", "### Changed Files");
+            for (const entry of result.comparison.changedEntries) {
+                lines.push(`- ${entry.path}: ${entry.reason} (archive ${formatBytes(entry.archiveSize)}, source ${formatBytes(entry.sourceSize)})`);
+            }
+        }
+        if (result.comparison.missingFromSource.length > 0) {
+            lines.push("", "### Missing From Source");
+            for (const entry of result.comparison.missingFromSource) {
+                lines.push(`- ${entry}`);
+            }
+        }
+        if (result.comparison.extraSourceEntries.length > 0) {
+            lines.push("", "### New In Source");
+            for (const entry of result.comparison.extraSourceEntries) {
+                lines.push(`- ${entry}`);
+            }
+        }
+    }
+    else {
+        lines.push(`- Status: packaged artifact reviewed without source comparison`);
+        lines.push(`- Next: run \`openclaw-skillkit inspect ${result.archivePath} --source ./path-to-skill\` to include drift status`);
+    }
+    lines.push("", "## Reviewer Checklist", "- Confirm the skill name, version, and description match the release you intend to share.", "- Confirm every referenced helper file is bundled in the archive contents above.", "- If source comparison was included, resolve any reported drift before publication.");
+    return lines.join("\n");
+}
 async function listExampleSkills(repoRoot = node_path_1.default.resolve(__dirname, "..", "..")) {
     const examplesDir = node_path_1.default.join(repoRoot, "examples");
     const entries = await (0, promises_1.readdir)(examplesDir, { withFileTypes: true });
@@ -286,4 +362,11 @@ function compareMetadataField(field, archiveValue, sourceValue) {
         archiveValue,
         sourceValue: normalizedSourceValue
     };
+}
+function defaultArchiveReportFileName(archivePath) {
+    const resolvedArchivePath = node_path_1.default.resolve(archivePath);
+    if (resolvedArchivePath.endsWith(".skill")) {
+        return `${resolvedArchivePath.slice(0, -".skill".length)}.report.md`;
+    }
+    return `${resolvedArchivePath}.report.md`;
 }

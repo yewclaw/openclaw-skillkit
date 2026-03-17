@@ -8,7 +8,7 @@ const path = require("node:path");
 const { makeTempDir } = require("./helpers/fixture.js");
 const { parseFrontmatter } = require("../dist/lib/frontmatter.js");
 const { lintSkill } = require("../dist/lib/skill.js");
-const { compareArchiveToSource, packSkill } = require("../dist/lib/workflow.js");
+const { buildArchiveReport, compareArchiveToSource, packSkill } = require("../dist/lib/workflow.js");
 const {
   classifyLintResult,
   evaluateDetectionCases,
@@ -292,6 +292,10 @@ Verify that artifact inspection can detect source drift.
   assert.equal(inspected.comparison.matches, false);
   assert.equal(inspected.comparison.changedEntries[0].path, "references/README.md");
   assert.equal(inspected.comparison.changedEntries[0].reason, "size-mismatch");
+  const report = buildArchiveReport(inspected);
+  assert.match(report, /# OpenClaw Skill Archive Report/);
+  assert.match(report, /Status: drift detected/);
+  assert.match(report, /### Changed Files/);
 });
 
 test("evaluation helpers summarize good-vs-bad detection metrics", () => {

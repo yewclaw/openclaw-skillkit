@@ -91,16 +91,17 @@ async function handleLint(parsed) {
     process.exitCode = exitCode;
 }
 async function handlePack(parsed) {
-    assertNoUnexpectedFlags(parsed, ["output", "format", "json"]);
+    assertNoUnexpectedFlags(parsed, ["output", "format", "json", "report"]);
     assertArgumentCount(parsed, 1, "pack expects exactly 1 target directory.");
     const targetDir = parsed.positionals[0] ?? ".";
     await (0, pack_1.runPack)(targetDir, {
         outputPath: typeof (0, args_1.getFlag)(parsed, "output") === "string" ? String((0, args_1.getFlag)(parsed, "output")) : undefined,
-        format: parseMachineFormat(parsed, "pack")
+        format: parseMachineFormat(parsed, "pack"),
+        reportPath: parseOptionalPathFlag(parsed, "report")
     });
 }
 async function handleInspect(parsed) {
-    assertNoUnexpectedFlags(parsed, ["format", "json", "source"]);
+    assertNoUnexpectedFlags(parsed, ["format", "json", "source", "report"]);
     assertArgumentCount(parsed, 1, "inspect expects exactly 1 archive path.");
     const archivePath = parsed.positionals[0];
     if (!archivePath) {
@@ -108,7 +109,8 @@ async function handleInspect(parsed) {
     }
     await (0, inspect_1.runInspect)(archivePath, {
         format: parseMachineFormat(parsed, "inspect"),
-        sourceDir: typeof (0, args_1.getFlag)(parsed, "source") === "string" ? String((0, args_1.getFlag)(parsed, "source")) : undefined
+        sourceDir: typeof (0, args_1.getFlag)(parsed, "source") === "string" ? String((0, args_1.getFlag)(parsed, "source")) : undefined,
+        reportPath: parseOptionalPathFlag(parsed, "report")
     });
 }
 async function handleServe(parsed) {
@@ -177,13 +179,14 @@ Examples:
 Create a .skill archive after lint passes.
 
   Usage:
-  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--json|--format text|json]
+  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit pack
   openclaw-skillkit pack skills/customer-support
   openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support
   openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
+  openclaw-skillkit pack skills/customer-support --report
 `);
         return;
     }
@@ -193,11 +196,12 @@ Examples:
 Inspect a packaged .skill archive and print the embedded manifest.
 
 Usage:
-  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--report [./artifacts/customer-support.report.md]] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit inspect ./artifacts/customer-support.skill
   openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
+  openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
   openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 `);
         return;
@@ -224,8 +228,8 @@ Build, lint, and pack OpenClaw skills.
 Usage:
   openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
   openclaw-skillkit lint [dir] [--json|--format text|json]
-  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--json|--format text|json]
-  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--json|--format text|json]
+  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
 
 Help:
@@ -271,6 +275,16 @@ function parseMachineFormat(parsed, commandName) {
         return formatFlag;
     }
     throw new Error(`Unknown ${commandName} format "${formatFlag}". Use "text" or "json".`);
+}
+function parseOptionalPathFlag(parsed, name) {
+    const value = (0, args_1.getFlag)(parsed, name);
+    if (typeof value === "undefined") {
+        return undefined;
+    }
+    if (value === true) {
+        return true;
+    }
+    return String(value);
 }
 function templateResourcesForSummary(template, resources) {
     return [...new Set([...templates_1.TEMPLATE_MODES[template], ...resources])];

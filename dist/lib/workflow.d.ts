@@ -50,6 +50,11 @@ export interface ArchiveSourceComparison {
         sourceValue: string;
     }>;
 }
+export interface InspectedArchiveResult {
+    archivePath: string;
+    manifest: SkillArchiveManifest;
+    comparison?: ArchiveSourceComparison;
+}
 export declare function summarizeLintResult(result: LintResult): LintSummary;
 export declare function summarizeFocusAreas(result: LintResult): FocusAreaSummary[];
 export declare function buildActionPlan(result: LintResult, resolvedDir: string): string[];
@@ -59,13 +64,9 @@ export declare function resolveArchiveDestination(resolvedDir: string, outputPat
     normalizedOutputPath: boolean;
 };
 export declare function packSkill(targetDir: string, outputPath?: string): Promise<PackSkillResult>;
-export declare function inspectSkillArchive(archivePath: string): Promise<{
-    archivePath: string;
-    manifest: SkillArchiveManifest;
-}>;
-export declare function compareArchiveToSource(archivePath: string, sourceDir: string): Promise<{
-    archivePath: string;
-    manifest: SkillArchiveManifest;
-    comparison: ArchiveSourceComparison;
-}>;
+export declare function inspectSkillArchive(archivePath: string): Promise<InspectedArchiveResult>;
+export declare function compareArchiveToSource(archivePath: string, sourceDir: string): Promise<InspectedArchiveResult>;
+export declare function resolveArchiveReportPath(archivePath: string, requestedPath?: string | boolean): string | undefined;
+export declare function writeArchiveReport(archivePath: string, result: InspectedArchiveResult, requestedPath?: string | boolean): Promise<string | undefined>;
+export declare function buildArchiveReport(result: InspectedArchiveResult): string;
 export declare function listExampleSkills(repoRoot?: string): Promise<ExampleSkillSummary[]>;

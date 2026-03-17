@@ -5,6 +5,7 @@ import { runInit } from "./init";
 import { lintSkill } from "../lib/skill";
 import { TEMPLATE_MODES, type TemplateMode } from "../lib/templates";
 import {
+  buildArchiveReport,
   buildActionPlan,
   compareArchiveToSource,
   inspectSkillArchive,
@@ -169,6 +170,10 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
         normalizedOutputPath: packed.normalizedOutputPath,
         archiveSizeBytes: packed.archiveSizeBytes,
         archiveSizeLabel: packed.archiveSizeLabel,
+        reportMarkdown: buildArchiveReport({
+          archivePath: packed.destination,
+          manifest: packed.manifest
+        }),
         warnings: packed.warnings,
         manifest: packed.manifest
       });
@@ -183,7 +188,10 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
           ? await compareArchiveToSource(archivePath, body.sourceDir)
           : await inspectSkillArchive(archivePath);
 
-      sendJson(response, 200, inspected);
+      sendJson(response, 200, {
+        ...inspected,
+        reportMarkdown: buildArchiveReport(inspected)
+      });
       return;
     }
 
@@ -1110,6 +1118,8 @@ function formatPackResult(result) {
     lines.push("- " + entry.path + " (" + entry.size + " B, sha256 " + (entry.sha256 ? entry.sha256.slice(0, 12) : "n/a") + "...)");
   }
 
+  lines.push("", "Release report:");
+  lines.push(result.reportMarkdown);
   lines.push("", "Recommended command:", "openclaw-skillkit inspect " + result.archivePath + " --source ./path-to-skill");
 
   return lines.join("\n");
@@ -1170,6 +1180,9 @@ function formatInspectResult(result) {
       }
     }
   }
+
+  lines.push("", "Release report:");
+  lines.push(result.reportMarkdown);
 
   return lines.join("\n");
 }

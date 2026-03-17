@@ -133,6 +133,10 @@ async function handleRequest(request, response) {
                 normalizedOutputPath: packed.normalizedOutputPath,
                 archiveSizeBytes: packed.archiveSizeBytes,
                 archiveSizeLabel: packed.archiveSizeLabel,
+                reportMarkdown: (0, workflow_1.buildArchiveReport)({
+                    archivePath: packed.destination,
+                    manifest: packed.manifest
+                }),
                 warnings: packed.warnings,
                 manifest: packed.manifest
             });
@@ -144,7 +148,10 @@ async function handleRequest(request, response) {
             const inspected = typeof body.sourceDir === "string" && body.sourceDir.trim()
                 ? await (0, workflow_1.compareArchiveToSource)(archivePath, body.sourceDir)
                 : await (0, workflow_1.inspectSkillArchive)(archivePath);
-            sendJson(response, 200, inspected);
+            sendJson(response, 200, {
+                ...inspected,
+                reportMarkdown: (0, workflow_1.buildArchiveReport)(inspected)
+            });
             return;
         }
         sendJson(response, 404, {
@@ -1055,6 +1062,8 @@ function formatPackResult(result) {
     lines.push("- " + entry.path + " (" + entry.size + " B, sha256 " + (entry.sha256 ? entry.sha256.slice(0, 12) : "n/a") + "...)");
   }
 
+  lines.push("", "Release report:");
+  lines.push(result.reportMarkdown);
   lines.push("", "Recommended command:", "openclaw-skillkit inspect " + result.archivePath + " --source ./path-to-skill");
 
   return lines.join("\n");
@@ -1115,6 +1124,9 @@ function formatInspectResult(result) {
       }
     }
   }
+
+  lines.push("", "Release report:");
+  lines.push(result.reportMarkdown);
 
   return lines.join("\n");
 }

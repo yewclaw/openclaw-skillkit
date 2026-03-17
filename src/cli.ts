@@ -98,18 +98,19 @@ async function handleLint(parsed: ReturnType<typeof parseArgs>): Promise<void> {
 }
 
 async function handlePack(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["output", "format", "json"]);
+  assertNoUnexpectedFlags(parsed, ["output", "format", "json", "report"]);
   assertArgumentCount(parsed, 1, "pack expects exactly 1 target directory.");
 
   const targetDir = parsed.positionals[0] ?? ".";
   await runPack(targetDir, {
     outputPath: typeof getFlag(parsed, "output") === "string" ? String(getFlag(parsed, "output")) : undefined,
-    format: parseMachineFormat(parsed, "pack")
+    format: parseMachineFormat(parsed, "pack"),
+    reportPath: parseOptionalPathFlag(parsed, "report")
   });
 }
 
 async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["format", "json", "source"]);
+  assertNoUnexpectedFlags(parsed, ["format", "json", "source", "report"]);
   assertArgumentCount(parsed, 1, "inspect expects exactly 1 archive path.");
 
   const archivePath = parsed.positionals[0];
@@ -119,7 +120,8 @@ async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void
 
   await runInspect(archivePath, {
     format: parseMachineFormat(parsed, "inspect"),
-    sourceDir: typeof getFlag(parsed, "source") === "string" ? String(getFlag(parsed, "source")) : undefined
+    sourceDir: typeof getFlag(parsed, "source") === "string" ? String(getFlag(parsed, "source")) : undefined,
+    reportPath: parseOptionalPathFlag(parsed, "report")
   });
 }
 
@@ -200,13 +202,14 @@ Examples:
 Create a .skill archive after lint passes.
 
   Usage:
-  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--json|--format text|json]
+  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit pack
   openclaw-skillkit pack skills/customer-support
   openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support
   openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
+  openclaw-skillkit pack skills/customer-support --report
 `);
     return;
   }
@@ -217,11 +220,12 @@ Examples:
 Inspect a packaged .skill archive and print the embedded manifest.
 
 Usage:
-  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--report [./artifacts/customer-support.report.md]] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit inspect ./artifacts/customer-support.skill
   openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
+  openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
   openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 `);
     return;
@@ -250,8 +254,8 @@ Build, lint, and pack OpenClaw skills.
 Usage:
   openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
   openclaw-skillkit lint [dir] [--json|--format text|json]
-  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--json|--format text|json]
-  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--json|--format text|json]
+  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
 
 Help:
@@ -309,6 +313,19 @@ function parseMachineFormat(parsed: ReturnType<typeof parseArgs>, commandName: s
   }
 
   throw new Error(`Unknown ${commandName} format "${formatFlag}". Use "text" or "json".`);
+}
+
+function parseOptionalPathFlag(parsed: ReturnType<typeof parseArgs>, name: string): string | boolean | undefined {
+  const value = getFlag(parsed, name);
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+
+  if (value === true) {
+    return true;
+  }
+
+  return String(value);
 }
 
 function templateResourcesForSummary(template: TemplateMode, resources: string[]): string[] {

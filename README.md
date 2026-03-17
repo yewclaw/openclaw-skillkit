@@ -20,8 +20,8 @@
 | --- | --- |
 | `init` | Generate a consistent skill layout with optional `references/`, `scripts/`, and `assets/`. |
 | `lint` | Catch weak metadata, placeholder copy, missing sections, and broken local references before review. |
-| `pack` | Create a `.skill` archive only after validation passes, with a manifest included for inspection. |
-| `inspect` | Read a packaged archive back out and verify exactly what skill metadata and files it contains. |
+| `pack` | Create a `.skill` archive only after validation passes, with a manifest and optional release report for inspection. |
+| `inspect` | Read a packaged archive back out, verify exactly what it contains, and optionally export a handoff report. |
 | `serve` | Launch a local Skill Studio web UI for demos, examples, linting, packaging, and archive inspection. |
 | `benchmark` | Measure fixture detection quality and CLI round-trip performance with repeatable runs. |
 
@@ -232,6 +232,7 @@ Example JSON output:
 ```bash
 openclaw-skillkit pack skills/customer-support
 openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
+openclaw-skillkit pack skills/customer-support --report
 openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill --json
 ```
 
@@ -250,7 +251,9 @@ Archive ready: /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill
   Inspect: openclaw-skillkit inspect /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill
 ```
 
-`pack --json` emits archive metadata for CI artifacts, release automation, or editor tooling.
+Use `--report` to write a Markdown handoff summary next to the archive by default, or pass an explicit path such as `--report ./artifacts/customer-support.report.md`.
+
+`pack --json` emits archive metadata for CI artifacts, release automation, editor tooling, and release note pipelines. The JSON payload now also includes the generated report markdown and report path when requested.
 
 ### 4. Inspect the final artifact before publishing
 
@@ -259,6 +262,7 @@ Use `inspect` to verify the packaged manifest instead of trusting a zip file bli
 ```bash
 openclaw-skillkit inspect ./artifacts/customer-support.skill
 openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
+openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
 openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 ```
 
@@ -269,6 +273,8 @@ Adding `--source` compares the archive to a current skill directory so you can c
 - files missing from the current source
 - new source files not present in the archive
 
+Adding `--report` exports the same inspection as a Markdown review artifact that is easier to attach to release notes, share in PRs, or hand to reviewers who do not want raw JSON.
+
 ## Commands
 
 | Command | Purpose |
@@ -276,8 +282,8 @@ Adding `--source` compares the archive to a current skill directory so you can c
 | `openclaw-skillkit help` | Show CLI help. |
 | `openclaw-skillkit help init` | Show scaffold options and flags. |
 | `openclaw-skillkit help lint` | Show lint modes, including JSON output. |
-| `openclaw-skillkit help pack` | Show packaging behavior, output options, and JSON reporting. |
-| `openclaw-skillkit help inspect` | Show artifact inspection usage. |
+| `openclaw-skillkit help pack` | Show packaging behavior, output options, JSON reporting, and report export. |
+| `openclaw-skillkit help inspect` | Show artifact inspection, drift comparison, and report export usage. |
 | `openclaw-skillkit help serve` | Show local studio host and port options. |
 | `openclaw-skillkit serve` | Start the local Skill Studio web interface. |
 | `npm run benchmark -- --help` | Show benchmark runner flags. |
@@ -299,7 +305,7 @@ The repo keeps the trust boundary explicit:
 
 - `pack` is gated by lint, so broken skills do not get archived by accident
 - packaged archives include skill metadata plus per-file sizes and hashes, and avoid recursively bundling old `.skill` artifacts
-- `inspect` lets authors and reviewers confirm the manifest from the built artifact itself and compare it against the current source directory for drift
+- `inspect` lets authors and reviewers confirm the manifest from the built artifact itself, compare it against the current source directory for drift, and export a review-ready Markdown report
 - fixture-driven tests cover parsing, linting, CLI behavior, and archive contents
 - `npm run verify` runs tests and benchmarks, and also typechecks plus rebuilds `dist/` when the local TypeScript compiler is available
 - GitHub Actions runs the same `npm run verify` command on pushes and pull requests

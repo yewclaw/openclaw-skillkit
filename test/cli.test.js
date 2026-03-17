@@ -306,6 +306,7 @@ serialTest("cli pack supports json output for artifact pipelines", async () => {
   assert.equal(payload.archiveSizeBytes > 0, true);
   assert.equal(payload.archiveSizeLabel.length > 0, true);
   assert.deepEqual(payload.warnings, []);
+  assert.match(payload.reportMarkdown, /# OpenClaw Skill Archive Report/);
   assert.equal(payload.manifest.skill.name, "weather-research");
   assert.deepEqual(payload.manifest.entries.map((entry) => entry.path), [
     "SKILL.md",
@@ -313,6 +314,23 @@ serialTest("cli pack supports json output for artifact pipelines", async () => {
     "references/README.md",
     "scripts/example.sh"
   ]);
+});
+
+serialTest("cli pack can export a markdown handoff report", async () => {
+  const tempDir = await makeTempDir("openclaw-pack-report-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  const reportPath = path.join(tempDir, "artifact-review.md");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+
+  const result = await runCli(["pack", skillDir, "--output", outputPath, "--report", reportPath]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Report: /);
+  const report = await fs.readFile(reportPath, "utf8");
+  assert.match(report, /# OpenClaw Skill Archive Report/);
+  assert.match(report, /weather-research@1\.2\.3/);
+  assert.match(report, /## Reviewer Checklist/);
 });
 
 serialTest("cli pack excludes nested .skill artifacts from the archive payload", async () => {
@@ -390,6 +408,7 @@ serialTest("cli inspect supports json output", async () => {
   assert.equal(payload.archivePath, outputPath);
   assert.equal(payload.manifest.skill.version, "1.2.3");
   assert.equal(payload.manifest.entryCount, 4);
+  assert.match(payload.reportMarkdown, /# OpenClaw Skill Archive Report/);
 });
 
 serialTest("cli inspect can compare an archive against its source directory", async () => {
@@ -407,6 +426,27 @@ serialTest("cli inspect can compare an archive against its source directory", as
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Comparison: drift detected/);
   assert.match(result.stdout, /Changed: references\/README\.md \(size-mismatch,/);
+});
+
+serialTest("cli inspect can export a markdown drift report", async () => {
+  const tempDir = await makeTempDir("openclaw-inspect-report-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+  const packResult = await runCli(["pack", skillDir, "--output", outputPath]);
+  assert.equal(packResult.code, 0, packResult.stderr);
+
+  await fs.appendFile(path.join(skillDir, "references", "README.md"), "\nDrifted after packaging.\n");
+
+  const result = await runCli(["inspect", outputPath, "--source", skillDir, "--report"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Report: /);
+  const reportPath = path.join(tempDir, "artifact.report.md");
+  const report = await fs.readFile(reportPath, "utf8");
+  assert.match(report, /Status: drift detected/);
+  assert.match(report, /### Changed Files/);
+  assert.match(report, /references\/README\.md/);
 });
 
 serialTest("cli rejects unknown flags with a clear error", async () => {

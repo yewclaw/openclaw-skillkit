@@ -6,10 +6,13 @@ async function runInspect(archivePath, options) {
     const inspected = options.sourceDir
         ? await (0, workflow_1.compareArchiveToSource)(archivePath, options.sourceDir)
         : await (0, workflow_1.inspectSkillArchive)(archivePath);
+    const reportPath = await (0, workflow_1.writeArchiveReport)(inspected.archivePath, inspected, options.reportPath);
     if (options.format === "json") {
         console.log(JSON.stringify({
             archivePath: inspected.archivePath,
             manifest: inspected.manifest,
+            reportPath,
+            reportMarkdown: (0, workflow_1.buildArchiveReport)(inspected),
             comparison: "comparison" in inspected ? inspected.comparison : undefined
         }, null, 2));
         return;
@@ -41,6 +44,9 @@ async function runInspect(archivePath, options) {
         if (comparison.extraSourceEntries.length > 0) {
             console.log(`  New in source: ${comparison.extraSourceEntries.join(", ")}`);
         }
+    }
+    if (reportPath) {
+        console.log(`  Report: ${reportPath}`);
     }
 }
 function hasComparison(value) {

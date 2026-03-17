@@ -1,13 +1,22 @@
 import { type SkillArchiveManifest } from "../lib/zip";
-import { formatBytes, packSkill } from "../lib/workflow";
+import { buildArchiveReport, formatBytes, packSkill, writeArchiveReport } from "../lib/workflow";
 
 export interface RunPackOptions {
   outputPath?: string;
   format: "text" | "json";
+  reportPath?: string | boolean;
 }
 
 export async function runPack(targetDir: string, options: RunPackOptions): Promise<void> {
   const packResult = await packSkill(targetDir, options.outputPath);
+  const reportPath = await writeArchiveReport(
+    packResult.destination,
+    {
+      archivePath: packResult.destination,
+      manifest: packResult.manifest
+    },
+    options.reportPath
+  );
 
   if (options.format === "text") {
     console.log(`Packing ${packResult.resolvedDir}`);
@@ -33,6 +42,11 @@ export async function runPack(targetDir: string, options: RunPackOptions): Promi
       JSON.stringify(
         {
           archivePath: packResult.destination,
+          reportPath,
+          reportMarkdown: buildArchiveReport({
+            archivePath: packResult.destination,
+            manifest: packResult.manifest
+          }),
           normalizedOutputPath: packResult.normalizedOutputPath,
           archiveSizeBytes: packResult.archiveSizeBytes,
           archiveSizeLabel: packResult.archiveSizeLabel,
@@ -51,14 +65,22 @@ export async function runPack(targetDir: string, options: RunPackOptions): Promi
     return;
   }
 
-  printArchiveSummary(packResult.destination, packResult.archiveSizeBytes, packResult.manifest);
+  printArchiveSummary(packResult.destination, packResult.archiveSizeBytes, packResult.manifest, reportPath);
 }
 
-function printArchiveSummary(destination: string, archiveSize: number, manifest: SkillArchiveManifest): void {
+function printArchiveSummary(
+  destination: string,
+  archiveSize: number,
+  manifest: SkillArchiveManifest,
+  reportPath?: string
+): void {
   console.log(`Archive ready: ${destination}`);
   console.log(
     `  Skill: ${manifest.skill.name}@${manifest.skill.version} (${manifest.entryCount} bundled file(s) plus manifest, ${formatBytes(archiveSize)}).`
   );
   console.log(`  Contents: ${manifest.entries.map((entry) => entry.path).join(", ")}`);
   console.log(`  Inspect: openclaw-skillkit inspect ${destination}`);
+  if (reportPath) {
+    console.log(`  Report: ${reportPath}`);
+  }
 }
