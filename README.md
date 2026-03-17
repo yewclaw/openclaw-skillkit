@@ -1,40 +1,52 @@
 # openclaw-skillkit
 
-Build, lint, package, and benchmark OpenClaw skills with a lean Node.js CLI.
+<p align="center">
+  <img src="https://img.shields.io/badge/node-22%2B-3C873A?logo=node.js&logoColor=white" alt="Node.js 22+" />
+  <img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT License" />
+  <img src="https://img.shields.io/badge/verify-npm%20run%20verify-0A7F5A" alt="Verify with npm run verify" />
+</p>
 
-`openclaw-skillkit` helps teams stop treating skills like loose markdown files and start treating them like shippable artifacts. It gives you a fast scaffold, concrete lint checks, packaging that refuses broken skills, and a repeatable benchmark loop you can run locally or in CI.
+<p align="center"><strong>Build, lint, package, and benchmark OpenClaw skills with a lean Node.js CLI.</strong></p>
 
-- Start a new skill with a consistent layout in one command
-- Catch weak metadata, broken references, and placeholder content before review
-- Package a `.skill` archive only after lint passes, with a built-in manifest for inspection
-- Measure detection quality and CLI round-trip performance with repeatable benchmarks
+`openclaw-skillkit` turns skill authoring into a repeatable workflow instead of a folder of markdown that drifts over time. It gives you a scaffold, concrete validation, packaging that refuses broken skills, and a benchmark loop you can run locally or in CI.
+
+<p align="center">
+  <img src="./docs/assets/skillkit-flow.svg" alt="Workflow diagram showing init, author, lint, pack, and benchmark steps in openclaw-skillkit." width="920" />
+</p>
+
+## At a Glance
+
+| Area | What you get |
+| --- | --- |
+| `init` | Generate a consistent skill layout with optional `references/`, `scripts/`, and `assets/`. |
+| `lint` | Catch weak metadata, placeholder copy, missing sections, and broken local references before review. |
+| `pack` | Create a `.skill` archive only after validation passes, with a manifest included for inspection. |
+| `benchmark` | Measure fixture detection quality and CLI round-trip performance with repeatable runs. |
 
 ## Why This Exists
 
-Most skill repos break trust early:
+Most skill repos lose trust for predictable reasons:
 
-- every new skill starts from a slightly different folder structure
-- `SKILL.md` metadata is vague or missing
-- local markdown references drift and fail later
-- packaging is manual, so validation gets skipped
-- quality discussions turn into opinion because nobody runs the same checks
+- every new skill starts from a slightly different structure
+- `SKILL.md` metadata is vague, missing, or left half-scaffolded
+- local references drift and break later
+- packaging becomes manual, so validation gets skipped
+- quality debates stay subjective because nobody runs the same checks
 
-`openclaw-skillkit` gives you one small workflow for the whole path from scaffold to archive.
+`openclaw-skillkit` keeps the workflow small: create, author, lint, pack, benchmark.
 
-## 60-Second Quickstart
+## Quickstart
 
-Requirements:
+Requirements: Node.js 22+
 
-- Node.js 22+
-
-Clone the repo, install dependencies, and verify the baseline:
+Install dependencies and verify the baseline:
 
 ```bash
 npm install
 npm run verify
 ```
 
-Create a skill, validate it, and package it:
+Create a skill, edit it, validate it, and package it:
 
 ```bash
 npx openclaw-skillkit init skills/customer-support --template scripts
@@ -53,11 +65,11 @@ node dist/cli.js pack examples/weather-research-skill
 node bench/index.js --iterations 3
 ```
 
-## What It Actually Solves
+## Workflow
 
 ### 1. Start from a real scaffold
 
-`init` creates a ready-to-edit skill directory instead of another ad hoc markdown file. Use template modes for the common cases, then add `--resources` only when you need to go off the happy path.
+`init` creates a ready-to-edit skill directory instead of another ad hoc markdown file.
 
 ```bash
 openclaw-skillkit init skills/customer-support \
@@ -75,7 +87,7 @@ Template modes:
 
 `--resources references,scripts,assets` still works and is merged with the selected template mode.
 
-Output:
+Resulting structure:
 
 ```text
 skills/customer-support/
@@ -88,18 +100,18 @@ skills/customer-support/
     └── example.sh
 ```
 
-### 2. Catch common quality failures early
+### 2. Catch trust-breaking issues early
 
-`lint` checks the things that usually make skills hard to trust or reuse:
+`lint` checks the failure modes that usually make skills hard to review or reuse:
 
 - missing or malformed `SKILL.md`
 - missing `name`, `description`, or `version` frontmatter
 - invalid slug-style skill names
 - invalid semver-like versions
 - placeholder descriptions or scaffold body copy left in place
-- missing headings that make the skill hard to review
+- missing headings that make the workflow hard to follow
 - broken local file references, including links that escape the skill root
-- stable issue codes and fix suggestions for each finding
+- stable issue codes and fix suggestions for every finding
 - focus-area summaries and next-step guidance for authors and CI consumers
 - JSON output for CI, editor extensions, and custom tooling
 
@@ -108,7 +120,7 @@ openclaw-skillkit lint skills/customer-support
 npx openclaw-skillkit lint skills/customer-support --json
 ```
 
-Example output:
+Example success output:
 
 ```text
 Linting /tmp/openclaw-skillkit-repo/examples/weather-research-skill
@@ -166,10 +178,9 @@ Example JSON output:
 }
 ```
 
-### 3. Package only when the skill is good enough to ship
+### 3. Package only when a skill is ready to ship
 
-`pack` runs lint first and refuses to create a `.skill` archive if blocking errors exist.
-It also skips nested `.skill` files and writes `.openclaw-skillkit/manifest.json` into the archive so adopters can inspect exactly what was bundled.
+`pack` runs lint first and refuses to create a `.skill` archive if blocking errors exist. It also skips nested `.skill` files and writes `.openclaw-skillkit/manifest.json` into the archive so adopters can inspect exactly what was bundled.
 
 ```bash
 openclaw-skillkit pack skills/customer-support
@@ -182,33 +193,30 @@ If you are already inside a skill directory:
 openclaw-skillkit pack
 ```
 
-## Example Workflow
+## Commands
 
-Use this when you want a simple authoring loop for a new skill:
+| Command | Purpose |
+| --- | --- |
+| `openclaw-skillkit help` | Show CLI help. |
+| `openclaw-skillkit help init` | Show scaffold options and flags. |
+| `openclaw-skillkit help lint` | Show lint modes, including JSON output. |
+| `openclaw-skillkit help pack` | Show packaging behavior and output options. |
+| `npm run benchmark -- --help` | Show benchmark runner flags. |
+| `npm run check` | Type-check without emitting build output. |
+| `npm run build` | Compile the CLI into `dist/`. |
+| `npm run verify` | Run the full local verification pipeline. |
 
-```bash
-npx openclaw-skillkit init skills/weather-brief --template scripts
-$EDITOR skills/weather-brief/SKILL.md
-npx openclaw-skillkit lint skills/weather-brief
-npx openclaw-skillkit pack skills/weather-brief --output ./artifacts/weather-brief.skill
-```
+## Example Skills
 
-Typical flow:
-
-1. `init` creates the folder structure and starter files.
-2. You replace the scaffold text in `SKILL.md` with real instructions and references.
-3. `lint` catches structural and quality issues before review.
-4. `pack` creates a portable archive once the skill clears validation.
-
-Working examples live in:
-
-- [`examples/weather-research-skill/`](examples/weather-research-skill/) for grounded trip-planning research
-- [`examples/customer-support-triage-skill/`](examples/customer-support-triage-skill/) for support queue routing and escalation
-- [`examples/release-notes-skill/`](examples/release-notes-skill/) for turning engineering change notes into customer-facing launches
+| Example | Focus |
+| --- | --- |
+| [`examples/weather-research-skill/`](examples/weather-research-skill/) | Grounded trip-planning research with references and scripts. |
+| [`examples/customer-support-triage-skill/`](examples/customer-support-triage-skill/) | Support queue routing and escalation. |
+| [`examples/release-notes-skill/`](examples/release-notes-skill/) | Turning engineering change notes into customer-facing launches. |
 
 ## Quality Pipeline
 
-This repo is opinionated about trust:
+The repo keeps the trust boundary explicit:
 
 - `pack` is gated by lint, so broken skills do not get archived by accident
 - packaged archives include a manifest and avoid recursively bundling old `.skill` artifacts
@@ -239,7 +247,7 @@ Benchmark summary
   Round trip x5: min 145.0ms, p50 149.4ms, avg 151.0ms
 ```
 
-## Why Teams Choose This Instead Of Rolling Their Own
+## Why Teams Use It
 
 - small surface area: three core CLI commands plus benchmarks
 - no runtime dependencies
@@ -247,15 +255,3 @@ Benchmark summary
 - plain markdown and filesystem conventions instead of a larger platform
 
 It is meant for teams that want a standard skill workflow quickly, without creating another internal toolchain project.
-
-## Commands
-
-```bash
-openclaw-skillkit help
-openclaw-skillkit help init
-openclaw-skillkit help lint
-openclaw-skillkit help pack
-npm run benchmark -- --help
-npm run check
-npm run build
-```
