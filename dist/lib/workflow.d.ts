@@ -73,10 +73,34 @@ export interface ArchiveSourceComparison {
         sourceValue: string;
     }>;
 }
+export interface ArchiveReleaseComparison {
+    baselineArchivePath: string;
+    comparedAt: string;
+    currentArchivePath: string;
+    metadataMatches: boolean;
+    matches: boolean;
+    entryCount: number;
+    baselineEntryCount: number;
+    matchedEntries: number;
+    addedEntries: string[];
+    removedEntries: string[];
+    changedEntries: Array<{
+        path: string;
+        currentSize: number;
+        baselineSize: number;
+        reason: "size-mismatch" | "hash-mismatch";
+    }>;
+    metadataDifferences: Array<{
+        field: "name" | "description" | "version";
+        currentValue: string;
+        baselineValue: string;
+    }>;
+}
 export interface InspectedArchiveResult {
     archivePath: string;
     manifest: SkillArchiveManifest;
     comparison?: ArchiveSourceComparison;
+    releaseComparison?: ArchiveReleaseComparison;
 }
 export type AssessmentStatus = "pass" | "warn" | "fail";
 export interface AssessmentCheck {
@@ -96,6 +120,12 @@ export interface ReviewSummary {
     confidence: string;
     checks: AssessmentCheck[];
 }
+export interface ReleaseDeltaSummary {
+    status: "same-release" | "release-changed";
+    headline: string;
+    confidence: string;
+    checks: AssessmentCheck[];
+}
 export declare function summarizeLintResult(result: LintResult): LintSummary;
 export declare function summarizeFocusAreas(result: LintResult): FocusAreaSummary[];
 export declare function buildActionPlan(result: LintResult, resolvedDir: string): string[];
@@ -108,6 +138,7 @@ export declare function packSkill(targetDir: string, outputPath?: string): Promi
 export declare function inspectSkillArchive(archivePath: string): Promise<InspectedArchiveResult>;
 export declare function reviewSkill(targetDir: string, outputPath?: string): Promise<SkillReviewResult>;
 export declare function compareArchiveToSource(archivePath: string, sourceDir: string): Promise<InspectedArchiveResult>;
+export declare function compareArchives(archivePath: string, baselineArchivePath: string): Promise<InspectedArchiveResult>;
 export declare function resolveArchiveReportPath(archivePath: string, requestedPath?: string | boolean): string | undefined;
 export declare function resolveReviewReportPath(review: SkillReviewResult, requestedPath?: string | boolean): string | undefined;
 export declare function writeArchiveReport(archivePath: string, result: InspectedArchiveResult, requestedPath?: string | boolean): Promise<string | undefined>;
@@ -116,4 +147,5 @@ export declare function buildArchiveReport(result: InspectedArchiveResult): stri
 export declare function buildReviewReport(review: SkillReviewResult): string;
 export declare function summarizeArchiveTrust(result: InspectedArchiveResult): ArchiveTrustSummary;
 export declare function summarizeReviewReadiness(review: SkillReviewResult): ReviewSummary;
+export declare function summarizeReleaseDelta(result: InspectedArchiveResult): ReleaseDeltaSummary;
 export declare function listExampleSkills(repoRoot?: string): Promise<ExampleSkillSummary[]>;

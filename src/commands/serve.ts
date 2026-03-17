@@ -8,11 +8,13 @@ import {
   buildArchiveReport,
   buildReviewReport,
   buildActionPlan,
+  compareArchives,
   compareArchiveToSource,
   inspectSkillArchive,
   listExampleSkills,
   packSkill,
   reviewSkill,
+  summarizeReleaseDelta,
   summarizeArchiveTrust,
   summarizeFocusAreas,
   summarizeReviewReadiness,
@@ -198,14 +200,23 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
     if (method === "POST" && url.pathname === "/api/inspect") {
       const body = await readJsonBody(request);
       const archivePath = requireString(body.archivePath, "archivePath");
-      const inspected =
+      let inspected =
         typeof body.sourceDir === "string" && body.sourceDir.trim()
           ? await compareArchiveToSource(archivePath, body.sourceDir)
           : await inspectSkillArchive(archivePath);
 
+      if (typeof body.baselineArchivePath === "string" && body.baselineArchivePath.trim()) {
+        const releaseCompared = await compareArchives(archivePath, body.baselineArchivePath);
+        inspected = {
+          ...inspected,
+          releaseComparison: releaseCompared.releaseComparison
+        };
+      }
+
       sendJson(response, 200, {
         ...inspected,
         trustSummary: summarizeArchiveTrust(inspected),
+        releaseDeltaSummary: summarizeReleaseDelta(inspected),
         reportMarkdown: buildArchiveReport(inspected)
       });
       return;
@@ -471,10 +482,15 @@ Use this when you want one release-readiness verdict with lint, packaging, and a
             <input id="inspect-source-input" placeholder="./examples/weather-research-skill" />
             <small>Optional. Detect drift between the packaged artifact and the current skill directory.</small>
           </label>
+          <label>
+            <span>Compare with previous archive</span>
+            <input id="inspect-baseline-input" placeholder="./artifacts/weather-research-prev.skill" />
+            <small>Optional. Show the release delta between this archive and a previous shipped artifact.</small>
+          </label>
           <div id="inspect-summary" class="summary-grid"></div>
           <pre id="inspect-result" class="result-card muted">Manifest details will appear here.
 
-Use this after packaging to verify the final archive contents, metadata, and source-to-artifact drift.</pre>
+Use this after packaging to verify the final archive contents, metadata, source-to-artifact drift, and release-to-release changes.</pre>
         </section>
       </main>
     </div>
@@ -956,6 +972,7 @@ const skillDirInput = document.querySelector("#skill-dir-input");
 const outputPathInput = document.querySelector("#output-path-input");
 const archivePathInput = document.querySelector("#archive-path-input");
 const inspectSourceInput = document.querySelector("#inspect-source-input");
+const inspectBaselineInput = document.querySelector("#inspect-baseline-input");
 const initResult = document.querySelector("#init-result");
 const lintResult = document.querySelector("#lint-result");
 const packResult = document.querySelector("#pack-result");
@@ -1190,17 +1207,26 @@ inspectForm.addEventListener("submit", async (event) => {
   try {
     const result = await api("/api/inspect", {
       archivePath: archivePathInput.value,
-      sourceDir: inspectSourceInput.value || undefined
+      sourceDir: inspectSourceInput.value || undefined,
+      baselineArchivePath: inspectBaselineInput.value || undefined
     });
     renderSummaryCards(inspectSummary, buildInspectSummaryCards(result));
     renderResult(inspectResult, formatInspectResult(result));
     setStatus(
-      result.comparison && !result.comparison.matches ? "Artifact drift detected" : "Archive inspected",
+      result.comparison && !result.comparison.matches
+        ? "Artifact drift detected"
+        : result.releaseComparison && !result.releaseComparison.matches
+          ? "Release delta detected"
+          : "Archive inspected",
       result.comparison
         ? result.comparison.matches
           ? "The packaged artifact matches the selected source skill."
           : "The packaged artifact differs from the selected source skill."
-        : "You are looking at the packaged manifest rather than the source directory.",
+        : result.releaseComparison
+          ? result.releaseComparison.matches
+            ? "The packaged artifact matches the selected baseline archive."
+            : "The packaged artifact differs from the selected baseline archive."
+          : "You are looking at the packaged manifest rather than the source directory.",
       result.comparison && !result.comparison.matches ? "error" : "ok"
     );
   } catch (error) {
@@ -1361,8 +1387,51 @@ function formatInspectResult(result) {
     }
   }
 
+  if (result.releaseComparison) {
+    lines.push(
+      "",
+      "Release delta",
+      "Baseline archive: " + result.releaseComparison.baselineArchivePath,
+      "Summary: " + result.releaseDeltaSummary.headline,
+      "Status: " + (result.releaseComparison.matches ? "matches baseline archive" : "release changed"),
+      "Matched baseline entries: " + result.releaseComparison.matchedEntries + "/" + result.releaseComparison.baselineEntryCount
+    );
+
+    if (result.releaseComparison.metadataDifferences.length) {
+      lines.push("", "Metadata changes:");
+      for (const difference of result.releaseComparison.metadataDifferences) {
+        lines.push("- " + difference.field + ': current="' + difference.currentValue + '" baseline="' + difference.baselineValue + '"');
+      }
+    }
+
+    if (result.releaseComparison.changedEntries.length) {
+      lines.push("", "Changed since baseline:");
+      for (const entry of result.releaseComparison.changedEntries) {
+        lines.push("- " + entry.path + " (" + entry.reason + ")");
+      }
+    }
+
+    if (result.releaseComparison.addedEntries.length) {
+      lines.push("", "Added since baseline:");
+      for (const entry of result.releaseComparison.addedEntries) {
+        lines.push("- " + entry);
+      }
+    }
+
+    if (result.releaseComparison.removedEntries.length) {
+      lines.push("", "Removed since baseline:");
+      for (const entry of result.releaseComparison.removedEntries) {
+        lines.push("- " + entry);
+      }
+    }
+  }
+
   if (!result.comparison) {
     lines.push("", "Next step:", "openclaw-skillkit inspect " + result.archivePath + " --source ./path-to-skill");
+  }
+
+  if (!result.releaseComparison) {
+    lines.push("", "Release history:", "openclaw-skillkit inspect " + result.archivePath + " --against ./previous-release.skill");
   }
 
   lines.push("", "Release report:");
@@ -1519,12 +1588,30 @@ function buildInspectSummaryCards(result) {
       detail: result.trustSummary.confidence,
       tone: result.trustSummary.status === "matching-source" ? "pass" : result.trustSummary.status === "verified" ? "warn" : "fail"
     }
-  ].concat(result.trustSummary.checks.map((check) => ({
-    label: check.label,
-    value: formatAssessment(check.status),
-    detail: check.detail,
-    tone: check.status
-  })));
+  ].concat(result.releaseComparison ? [{
+    label: "Release delta",
+    value: result.releaseDeltaSummary.headline,
+    detail: result.releaseDeltaSummary.confidence,
+    tone: result.releaseDeltaSummary.status === "same-release" ? "pass" : "warn"
+  }] : [])
+    .concat(
+      result.trustSummary.checks.map((check) => ({
+        label: check.label,
+        value: formatAssessment(check.status),
+        detail: check.detail,
+        tone: check.status
+      }))
+    )
+    .concat(
+      result.releaseComparison
+        ? result.releaseDeltaSummary.checks.map((check) => ({
+            label: check.label,
+            value: formatAssessment(check.status),
+            detail: check.detail,
+            tone: check.status
+          }))
+        : []
+    );
 }
 
 function formatAssessment(status) {

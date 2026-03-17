@@ -96,6 +96,7 @@ Skill Studio is designed to feel like the product surface for the toolkit, not a
 - get clearer empty states and recommended next actions after each operation
 - prefill a new skill scaffold from a checked-in example's structure and metadata
 - move directly from packaging into archive inspection without re-entering paths
+- compare a new archive against the current source or a previous shipped artifact from the same inspect panel
 
 Use it to:
 
@@ -103,6 +104,7 @@ Use it to:
 - compare examples, preload their paths, and prefill a matching scaffold
 - lint a local skill directory and review fix guidance
 - package a `.skill` archive and inspect the bundled manifest
+- compare an archive against a previous `.skill` to review release deltas before handoff
 - run one release-readiness review that combines lint, packaging, and artifact verification
 
 Run it with either command:
@@ -282,6 +284,8 @@ Use `inspect` to verify the packaged manifest instead of trusting a zip file bli
 ```bash
 openclaw-skillkit inspect ./artifacts/customer-support.skill
 openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
+openclaw-skillkit inspect ./artifacts/customer-support.skill --against ./artifacts/customer-support-prev.skill
+openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
 openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
 openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 ```
@@ -294,6 +298,15 @@ Adding `--source` compares the archive to a current skill directory so you can c
 - new source files not present in the archive
 
 The text, JSON, Studio, and Markdown report outputs now all include the same trust summary so reviewers can quickly see whether the manifest was verified, whether metadata still matches, and whether the archive still reflects the current source.
+
+Adding `--against` compares the current archive against a previous `.skill` artifact so release reviewers can see:
+
+- metadata changes such as version or description updates
+- bundled files added since the previous release
+- bundled files removed since the previous release
+- bundled files that changed between artifacts
+
+That release-delta view is available in the same text, JSON, Studio, and Markdown report outputs, so the handoff answer covers both "does this still match source?" and "what changed since the last shipped artifact?"
 
 Adding `--report` exports the same inspection as a Markdown review artifact that is easier to attach to release notes, share in PRs, or hand to reviewers who do not want raw JSON.
 
@@ -324,7 +337,7 @@ That review output now includes a small release scorecard across CLI, Studio, JS
 | `openclaw-skillkit help init` | Show scaffold options and flags. |
 | `openclaw-skillkit help lint` | Show lint modes, including JSON output. |
 | `openclaw-skillkit help pack` | Show packaging behavior, output options, JSON reporting, and report export. |
-| `openclaw-skillkit help inspect` | Show artifact inspection, drift comparison, and report export usage. |
+| `openclaw-skillkit help inspect` | Show artifact inspection, source drift comparison, release delta comparison, and report export usage. |
 | `openclaw-skillkit help review` | Show the combined release-readiness workflow and report export usage. |
 | `openclaw-skillkit help serve` | Show local studio host and port options. |
 | `openclaw-skillkit serve` | Start the local Skill Studio web interface. |
@@ -347,7 +360,7 @@ The repo keeps the trust boundary explicit:
 
 - `pack` is gated by lint, so broken skills do not get archived by accident
 - packaged archives include skill metadata plus per-file sizes and hashes, and avoid recursively bundling old `.skill` artifacts
-- `inspect` lets authors and reviewers confirm the manifest from the built artifact itself, compare it against the current source directory for drift, and export a review-ready Markdown report
+- `inspect` lets authors and reviewers confirm the manifest from the built artifact itself, compare it against the current source directory for drift, compare it against a previous shipped artifact for release deltas, and export a review-ready Markdown report
 - `review` provides a single readiness verdict that covers lint status, archive creation, and source-to-artifact parity before handoff
 - fixture-driven tests cover parsing, linting, CLI behavior, and archive contents
 - `npm run verify` runs tests and benchmarks, and also typechecks plus rebuilds `dist/` when the local TypeScript compiler is available

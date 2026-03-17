@@ -86,10 +86,35 @@ export interface ArchiveSourceComparison {
   }>;
 }
 
+export interface ArchiveReleaseComparison {
+  baselineArchivePath: string;
+  comparedAt: string;
+  currentArchivePath: string;
+  metadataMatches: boolean;
+  matches: boolean;
+  entryCount: number;
+  baselineEntryCount: number;
+  matchedEntries: number;
+  addedEntries: string[];
+  removedEntries: string[];
+  changedEntries: Array<{
+    path: string;
+    currentSize: number;
+    baselineSize: number;
+    reason: "size-mismatch" | "hash-mismatch";
+  }>;
+  metadataDifferences: Array<{
+    field: "name" | "description" | "version";
+    currentValue: string;
+    baselineValue: string;
+  }>;
+}
+
 export interface InspectedArchiveResult {
   archivePath: string;
   manifest: SkillArchiveManifest;
   comparison?: ArchiveSourceComparison;
+  releaseComparison?: ArchiveReleaseComparison;
 }
 
 export type AssessmentStatus = "pass" | "warn" | "fail";
@@ -109,6 +134,13 @@ export interface ArchiveTrustSummary {
 }
 
 export interface ReviewSummary {
+  headline: string;
+  confidence: string;
+  checks: AssessmentCheck[];
+}
+
+export interface ReleaseDeltaSummary {
+  status: "same-release" | "release-changed";
   headline: string;
   confidence: string;
   checks: AssessmentCheck[];
@@ -401,6 +433,86 @@ export async function compareArchiveToSource(
   };
 }
 
+export async function compareArchives(
+  archivePath: string,
+  baselineArchivePath: string
+): Promise<InspectedArchiveResult> {
+  const current = await inspectSkillArchive(archivePath);
+  const baseline = await inspectSkillArchive(baselineArchivePath);
+  const currentByPath = new Map(
+    current.manifest.entries.map((entry) => [
+      entry.path,
+      {
+        size: entry.size,
+        sha256: entry.sha256
+      }
+    ])
+  );
+  const metadataDifferences = [
+    compareArchiveMetadataField("name", current.manifest.skill.name, baseline.manifest.skill.name),
+    compareArchiveMetadataField("description", current.manifest.skill.description, baseline.manifest.skill.description),
+    compareArchiveMetadataField("version", current.manifest.skill.version, baseline.manifest.skill.version)
+  ].filter(Boolean) as ArchiveReleaseComparison["metadataDifferences"];
+  const removedEntries: string[] = [];
+  const changedEntries: ArchiveReleaseComparison["changedEntries"] = [];
+  let matchedEntries = 0;
+
+  for (const baselineEntry of baseline.manifest.entries) {
+    const currentEntry = currentByPath.get(baselineEntry.path);
+    if (!currentEntry) {
+      removedEntries.push(baselineEntry.path);
+      continue;
+    }
+
+    currentByPath.delete(baselineEntry.path);
+
+    if (currentEntry.size !== baselineEntry.size) {
+      changedEntries.push({
+        path: baselineEntry.path,
+        currentSize: currentEntry.size,
+        baselineSize: baselineEntry.size,
+        reason: "size-mismatch"
+      });
+      continue;
+    }
+
+    if (baselineEntry.sha256 && currentEntry.sha256 !== baselineEntry.sha256) {
+      changedEntries.push({
+        path: baselineEntry.path,
+        currentSize: currentEntry.size,
+        baselineSize: baselineEntry.size,
+        reason: "hash-mismatch"
+      });
+      continue;
+    }
+
+    matchedEntries += 1;
+  }
+
+  const addedEntries = [...currentByPath.keys()].sort((left, right) => left.localeCompare(right));
+  const metadataMatches = metadataDifferences.length === 0;
+  const matches = metadataMatches && addedEntries.length === 0 && removedEntries.length === 0 && changedEntries.length === 0;
+
+  return {
+    archivePath: current.archivePath,
+    manifest: current.manifest,
+    releaseComparison: {
+      baselineArchivePath: baseline.archivePath,
+      currentArchivePath: current.archivePath,
+      comparedAt: new Date().toISOString(),
+      metadataMatches,
+      matches,
+      entryCount: current.manifest.entryCount,
+      baselineEntryCount: baseline.manifest.entryCount,
+      matchedEntries,
+      addedEntries,
+      removedEntries,
+      changedEntries,
+      metadataDifferences
+    }
+  };
+}
+
 export function resolveArchiveReportPath(archivePath: string, requestedPath?: string | boolean): string | undefined {
   if (!requestedPath) {
     return undefined;
@@ -537,7 +649,60 @@ export function buildArchiveReport(result: InspectedArchiveResult): string {
         lines.push(`- ${entry}`);
       }
     }
-  } else {
+  }
+
+  if (result.releaseComparison) {
+    const releaseDelta = summarizeReleaseDelta(result);
+    lines.push(
+      "",
+      "## Release Delta",
+      `- Headline: ${releaseDelta.headline}`,
+      `- Confidence: ${releaseDelta.confidence}`,
+      `- Baseline archive: ${result.releaseComparison.baselineArchivePath}`,
+      `- Compared at: ${result.releaseComparison.comparedAt}`,
+      `- Status: ${result.releaseComparison.matches ? "no release delta detected" : "release changed"}`,
+      `- Matched files: ${result.releaseComparison.matchedEntries}/${result.releaseComparison.baselineEntryCount}`
+    );
+
+    lines.push("", "### Delta Checks");
+    for (const check of releaseDelta.checks) {
+      lines.push(`- ${formatAssessmentStatus(check.status)} ${check.label}: ${check.detail}`);
+    }
+
+    if (result.releaseComparison.metadataDifferences.length > 0) {
+      lines.push("", "### Metadata Changes");
+      for (const difference of result.releaseComparison.metadataDifferences) {
+        lines.push(
+          `- ${difference.field}: current="${difference.currentValue}" baseline="${difference.baselineValue}"`
+        );
+      }
+    }
+
+    if (result.releaseComparison.changedEntries.length > 0) {
+      lines.push("", "### Changed Since Baseline");
+      for (const entry of result.releaseComparison.changedEntries) {
+        lines.push(
+          `- ${entry.path}: ${entry.reason} (current ${formatBytes(entry.currentSize)}, baseline ${formatBytes(entry.baselineSize)})`
+        );
+      }
+    }
+
+    if (result.releaseComparison.addedEntries.length > 0) {
+      lines.push("", "### Added Since Baseline");
+      for (const entry of result.releaseComparison.addedEntries) {
+        lines.push(`- ${entry}`);
+      }
+    }
+
+    if (result.releaseComparison.removedEntries.length > 0) {
+      lines.push("", "### Removed Since Baseline");
+      for (const entry of result.releaseComparison.removedEntries) {
+        lines.push(`- ${entry}`);
+      }
+    }
+  }
+
+  if (!result.comparison) {
     lines.push(`- Status: packaged artifact reviewed without source comparison`);
     lines.push(`- Next: run \`openclaw-skillkit inspect ${result.archivePath} --source ./path-to-skill\` to include drift status`);
   }
@@ -547,7 +712,8 @@ export function buildArchiveReport(result: InspectedArchiveResult): string {
     "## Reviewer Checklist",
     "- Confirm the skill name, version, and description match the release you intend to share.",
     "- Confirm every referenced helper file is bundled in the archive contents above.",
-    "- If source comparison was included, resolve any reported drift before publication."
+    "- If source comparison was included, resolve any reported drift before publication.",
+    "- If a baseline archive was included, confirm the release delta matches what you intended to ship."
   );
 
   return lines.join("\n");
@@ -770,6 +936,51 @@ export function summarizeReviewReadiness(review: SkillReviewResult): ReviewSumma
   };
 }
 
+export function summarizeReleaseDelta(result: InspectedArchiveResult): ReleaseDeltaSummary {
+  if (!result.releaseComparison) {
+    return {
+      status: "same-release",
+      headline: "No baseline archive selected",
+      confidence: "Select a previous .skill artifact to see exactly what changed between releases.",
+      checks: []
+    };
+  }
+
+  const comparison = result.releaseComparison;
+  const checks: AssessmentCheck[] = [
+    {
+      label: "Metadata delta",
+      status: comparison.metadataMatches ? "pass" : "warn",
+      detail: comparison.metadataMatches
+        ? "name, description, and version match the baseline archive"
+        : `${comparison.metadataDifferences.length} metadata field(s) changed`
+    },
+    {
+      label: "File delta",
+      status: comparison.matches ? "pass" : "warn",
+      detail: comparison.matches
+        ? `${comparison.matchedEntries}/${comparison.baselineEntryCount} baseline files are unchanged`
+        : buildReleaseDeltaDetail(comparison)
+    }
+  ];
+
+  if (comparison.matches) {
+    return {
+      status: "same-release",
+      headline: "Matches baseline archive",
+      confidence: "The current artifact is identical to the selected baseline archive at the manifest level.",
+      checks
+    };
+  }
+
+  return {
+    status: "release-changed",
+    headline: "Release delta detected",
+    confidence: "The current artifact differs from the selected baseline archive, so reviewers can inspect exactly what changed before handoff.",
+    checks
+  };
+}
+
 export async function listExampleSkills(repoRoot = path.resolve(__dirname, "..", "..")): Promise<ExampleSkillSummary[]> {
   const examplesDir = path.join(repoRoot, "examples");
   const entries = await readdir(examplesDir, { withFileTypes: true });
@@ -940,6 +1151,22 @@ function compareMetadataField(
   };
 }
 
+function compareArchiveMetadataField(
+  field: "name" | "description" | "version",
+  currentValue: string,
+  baselineValue: string
+): ArchiveReleaseComparison["metadataDifferences"][number] | null {
+  if (currentValue === baselineValue) {
+    return null;
+  }
+
+  return {
+    field,
+    currentValue,
+    baselineValue
+  };
+}
+
 function defaultArchiveReportFileName(archivePath: string): string {
   const resolvedArchivePath = path.resolve(archivePath);
   if (resolvedArchivePath.endsWith(".skill")) {
@@ -1004,6 +1231,28 @@ function buildParityDetail(comparison: ArchiveSourceComparison): string {
   }
 
   return details.join(", ") || `${comparison.matchedEntries}/${comparison.entryCount} entries match`;
+}
+
+function buildReleaseDeltaDetail(comparison: ArchiveReleaseComparison): string {
+  const details: string[] = [];
+
+  if (comparison.changedEntries.length > 0) {
+    details.push(`${comparison.changedEntries.length} changed file(s)`);
+  }
+
+  if (comparison.addedEntries.length > 0) {
+    details.push(`${comparison.addedEntries.length} new file(s)`);
+  }
+
+  if (comparison.removedEntries.length > 0) {
+    details.push(`${comparison.removedEntries.length} removed file(s)`);
+  }
+
+  if (comparison.metadataDifferences.length > 0) {
+    details.push(`${comparison.metadataDifferences.length} metadata change(s)`);
+  }
+
+  return details.join(", ") || `${comparison.matchedEntries}/${comparison.baselineEntryCount} baseline entries match`;
 }
 
 function mapTrustStatusToAssessment(status: ArchiveTrustSummary["status"]): AssessmentStatus {

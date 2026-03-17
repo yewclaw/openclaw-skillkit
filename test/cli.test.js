@@ -429,6 +429,14 @@ serialTest("cli inspect supports json output", async () => {
   assert.match(payload.reportMarkdown, /# OpenClaw Skill Archive Report/);
 });
 
+serialTest("cli help documents archive-to-archive inspection", async () => {
+  const result = await runCli(["help", "inspect"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /--against \.\/previous\.skill/);
+  assert.match(result.stdout, /customer-support-prev\.skill/);
+});
+
 serialTest("cli inspect can compare an archive against its source directory", async () => {
   const tempDir = await makeTempDir("openclaw-inspect-compare-");
   const skillDir = path.join(tempDir, "skill");
@@ -467,6 +475,58 @@ serialTest("cli inspect can export a markdown drift report", async () => {
   assert.match(report, /Status: drift detected/);
   assert.match(report, /### Changed Files/);
   assert.match(report, /references\/README\.md/);
+});
+
+serialTest("cli inspect can compare the current archive against a baseline archive", async () => {
+  const tempDir = await makeTempDir("openclaw-inspect-against-");
+  const skillDir = path.join(tempDir, "skill");
+  const baselineArchivePath = path.join(tempDir, "baseline.skill");
+  const currentArchivePath = path.join(tempDir, "current.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+
+  let result = await runCli(["pack", skillDir, "--output", baselineArchivePath]);
+  assert.equal(result.code, 0, result.stderr);
+
+  await fs.appendFile(path.join(skillDir, "references", "README.md"), "\nUpdated after baseline.\n");
+
+  result = await runCli(["pack", skillDir, "--output", currentArchivePath]);
+  assert.equal(result.code, 0, result.stderr);
+
+  result = await runCli(["inspect", currentArchivePath, "--against", baselineArchivePath]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Release delta: Release delta detected/);
+  assert.match(result.stdout, /Baseline archive: /);
+  assert.match(result.stdout, /Delta: release changed/);
+  assert.match(result.stdout, /Changed since baseline: references\/README\.md/);
+});
+
+serialTest("cli inspect json can include both source and baseline comparisons", async () => {
+  const tempDir = await makeTempDir("openclaw-inspect-full-");
+  const skillDir = path.join(tempDir, "skill");
+  const baselineArchivePath = path.join(tempDir, "baseline.skill");
+  const currentArchivePath = path.join(tempDir, "current.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+
+  let result = await runCli(["pack", skillDir, "--output", baselineArchivePath]);
+  assert.equal(result.code, 0, result.stderr);
+
+  await fs.appendFile(path.join(skillDir, "references", "README.md"), "\nChanged after release.\n");
+
+  result = await runCli(["pack", skillDir, "--output", currentArchivePath]);
+  assert.equal(result.code, 0, result.stderr);
+
+  await fs.appendFile(path.join(skillDir, "references", "README.md"), "\nChanged after packaging.\n");
+
+  result = await runCli(["inspect", currentArchivePath, "--source", skillDir, "--against", baselineArchivePath, "--json"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.trustSummary.status, "drift-detected");
+  assert.equal(payload.releaseDeltaSummary.status, "release-changed");
+  assert.equal(payload.comparison.matches, false);
+  assert.equal(payload.releaseComparison.matches, false);
+  assert.match(payload.reportMarkdown, /## Release Delta/);
 });
 
 serialTest("cli review packages a valid skill and reports readiness", async () => {

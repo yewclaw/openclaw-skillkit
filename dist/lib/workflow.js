@@ -12,6 +12,7 @@ exports.packSkill = packSkill;
 exports.inspectSkillArchive = inspectSkillArchive;
 exports.reviewSkill = reviewSkill;
 exports.compareArchiveToSource = compareArchiveToSource;
+exports.compareArchives = compareArchives;
 exports.resolveArchiveReportPath = resolveArchiveReportPath;
 exports.resolveReviewReportPath = resolveReviewReportPath;
 exports.writeArchiveReport = writeArchiveReport;
@@ -20,6 +21,7 @@ exports.buildArchiveReport = buildArchiveReport;
 exports.buildReviewReport = buildReviewReport;
 exports.summarizeArchiveTrust = summarizeArchiveTrust;
 exports.summarizeReviewReadiness = summarizeReviewReadiness;
+exports.summarizeReleaseDelta = summarizeReleaseDelta;
 exports.listExampleSkills = listExampleSkills;
 const node_path_1 = __importDefault(require("node:path"));
 const node_crypto_1 = require("node:crypto");
@@ -255,6 +257,73 @@ async function compareArchiveToSource(archivePath, sourceDir) {
         }
     };
 }
+async function compareArchives(archivePath, baselineArchivePath) {
+    const current = await inspectSkillArchive(archivePath);
+    const baseline = await inspectSkillArchive(baselineArchivePath);
+    const currentByPath = new Map(current.manifest.entries.map((entry) => [
+        entry.path,
+        {
+            size: entry.size,
+            sha256: entry.sha256
+        }
+    ]));
+    const metadataDifferences = [
+        compareArchiveMetadataField("name", current.manifest.skill.name, baseline.manifest.skill.name),
+        compareArchiveMetadataField("description", current.manifest.skill.description, baseline.manifest.skill.description),
+        compareArchiveMetadataField("version", current.manifest.skill.version, baseline.manifest.skill.version)
+    ].filter(Boolean);
+    const removedEntries = [];
+    const changedEntries = [];
+    let matchedEntries = 0;
+    for (const baselineEntry of baseline.manifest.entries) {
+        const currentEntry = currentByPath.get(baselineEntry.path);
+        if (!currentEntry) {
+            removedEntries.push(baselineEntry.path);
+            continue;
+        }
+        currentByPath.delete(baselineEntry.path);
+        if (currentEntry.size !== baselineEntry.size) {
+            changedEntries.push({
+                path: baselineEntry.path,
+                currentSize: currentEntry.size,
+                baselineSize: baselineEntry.size,
+                reason: "size-mismatch"
+            });
+            continue;
+        }
+        if (baselineEntry.sha256 && currentEntry.sha256 !== baselineEntry.sha256) {
+            changedEntries.push({
+                path: baselineEntry.path,
+                currentSize: currentEntry.size,
+                baselineSize: baselineEntry.size,
+                reason: "hash-mismatch"
+            });
+            continue;
+        }
+        matchedEntries += 1;
+    }
+    const addedEntries = [...currentByPath.keys()].sort((left, right) => left.localeCompare(right));
+    const metadataMatches = metadataDifferences.length === 0;
+    const matches = metadataMatches && addedEntries.length === 0 && removedEntries.length === 0 && changedEntries.length === 0;
+    return {
+        archivePath: current.archivePath,
+        manifest: current.manifest,
+        releaseComparison: {
+            baselineArchivePath: baseline.archivePath,
+            currentArchivePath: current.archivePath,
+            comparedAt: new Date().toISOString(),
+            metadataMatches,
+            matches,
+            entryCount: current.manifest.entryCount,
+            baselineEntryCount: baseline.manifest.entryCount,
+            matchedEntries,
+            addedEntries,
+            removedEntries,
+            changedEntries,
+            metadataDifferences
+        }
+    };
+}
 function resolveArchiveReportPath(archivePath, requestedPath) {
     if (!requestedPath) {
         return undefined;
@@ -341,11 +410,43 @@ function buildArchiveReport(result) {
             }
         }
     }
-    else {
+    if (result.releaseComparison) {
+        const releaseDelta = summarizeReleaseDelta(result);
+        lines.push("", "## Release Delta", `- Headline: ${releaseDelta.headline}`, `- Confidence: ${releaseDelta.confidence}`, `- Baseline archive: ${result.releaseComparison.baselineArchivePath}`, `- Compared at: ${result.releaseComparison.comparedAt}`, `- Status: ${result.releaseComparison.matches ? "no release delta detected" : "release changed"}`, `- Matched files: ${result.releaseComparison.matchedEntries}/${result.releaseComparison.baselineEntryCount}`);
+        lines.push("", "### Delta Checks");
+        for (const check of releaseDelta.checks) {
+            lines.push(`- ${formatAssessmentStatus(check.status)} ${check.label}: ${check.detail}`);
+        }
+        if (result.releaseComparison.metadataDifferences.length > 0) {
+            lines.push("", "### Metadata Changes");
+            for (const difference of result.releaseComparison.metadataDifferences) {
+                lines.push(`- ${difference.field}: current="${difference.currentValue}" baseline="${difference.baselineValue}"`);
+            }
+        }
+        if (result.releaseComparison.changedEntries.length > 0) {
+            lines.push("", "### Changed Since Baseline");
+            for (const entry of result.releaseComparison.changedEntries) {
+                lines.push(`- ${entry.path}: ${entry.reason} (current ${formatBytes(entry.currentSize)}, baseline ${formatBytes(entry.baselineSize)})`);
+            }
+        }
+        if (result.releaseComparison.addedEntries.length > 0) {
+            lines.push("", "### Added Since Baseline");
+            for (const entry of result.releaseComparison.addedEntries) {
+                lines.push(`- ${entry}`);
+            }
+        }
+        if (result.releaseComparison.removedEntries.length > 0) {
+            lines.push("", "### Removed Since Baseline");
+            for (const entry of result.releaseComparison.removedEntries) {
+                lines.push(`- ${entry}`);
+            }
+        }
+    }
+    if (!result.comparison) {
         lines.push(`- Status: packaged artifact reviewed without source comparison`);
         lines.push(`- Next: run \`openclaw-skillkit inspect ${result.archivePath} --source ./path-to-skill\` to include drift status`);
     }
-    lines.push("", "## Reviewer Checklist", "- Confirm the skill name, version, and description match the release you intend to share.", "- Confirm every referenced helper file is bundled in the archive contents above.", "- If source comparison was included, resolve any reported drift before publication.");
+    lines.push("", "## Reviewer Checklist", "- Confirm the skill name, version, and description match the release you intend to share.", "- Confirm every referenced helper file is bundled in the archive contents above.", "- If source comparison was included, resolve any reported drift before publication.", "- If a baseline archive was included, confirm the release delta matches what you intended to ship.");
     return lines.join("\n");
 }
 function buildReviewReport(review) {
@@ -523,6 +624,47 @@ function summarizeReviewReadiness(review) {
         checks
     };
 }
+function summarizeReleaseDelta(result) {
+    if (!result.releaseComparison) {
+        return {
+            status: "same-release",
+            headline: "No baseline archive selected",
+            confidence: "Select a previous .skill artifact to see exactly what changed between releases.",
+            checks: []
+        };
+    }
+    const comparison = result.releaseComparison;
+    const checks = [
+        {
+            label: "Metadata delta",
+            status: comparison.metadataMatches ? "pass" : "warn",
+            detail: comparison.metadataMatches
+                ? "name, description, and version match the baseline archive"
+                : `${comparison.metadataDifferences.length} metadata field(s) changed`
+        },
+        {
+            label: "File delta",
+            status: comparison.matches ? "pass" : "warn",
+            detail: comparison.matches
+                ? `${comparison.matchedEntries}/${comparison.baselineEntryCount} baseline files are unchanged`
+                : buildReleaseDeltaDetail(comparison)
+        }
+    ];
+    if (comparison.matches) {
+        return {
+            status: "same-release",
+            headline: "Matches baseline archive",
+            confidence: "The current artifact is identical to the selected baseline archive at the manifest level.",
+            checks
+        };
+    }
+    return {
+        status: "release-changed",
+        headline: "Release delta detected",
+        confidence: "The current artifact differs from the selected baseline archive, so reviewers can inspect exactly what changed before handoff.",
+        checks
+    };
+}
 async function listExampleSkills(repoRoot = node_path_1.default.resolve(__dirname, "..", "..")) {
     const examplesDir = node_path_1.default.join(repoRoot, "examples");
     const entries = await (0, promises_1.readdir)(examplesDir, { withFileTypes: true });
@@ -653,6 +795,16 @@ function compareMetadataField(field, archiveValue, sourceValue) {
         sourceValue: normalizedSourceValue
     };
 }
+function compareArchiveMetadataField(field, currentValue, baselineValue) {
+    if (currentValue === baselineValue) {
+        return null;
+    }
+    return {
+        field,
+        currentValue,
+        baselineValue
+    };
+}
 function defaultArchiveReportFileName(archivePath) {
     const resolvedArchivePath = node_path_1.default.resolve(archivePath);
     if (resolvedArchivePath.endsWith(".skill")) {
@@ -705,6 +857,22 @@ function buildParityDetail(comparison) {
         details.push(`${comparison.metadataDifferences.length} metadata difference(s)`);
     }
     return details.join(", ") || `${comparison.matchedEntries}/${comparison.entryCount} entries match`;
+}
+function buildReleaseDeltaDetail(comparison) {
+    const details = [];
+    if (comparison.changedEntries.length > 0) {
+        details.push(`${comparison.changedEntries.length} changed file(s)`);
+    }
+    if (comparison.addedEntries.length > 0) {
+        details.push(`${comparison.addedEntries.length} new file(s)`);
+    }
+    if (comparison.removedEntries.length > 0) {
+        details.push(`${comparison.removedEntries.length} removed file(s)`);
+    }
+    if (comparison.metadataDifferences.length > 0) {
+        details.push(`${comparison.metadataDifferences.length} metadata change(s)`);
+    }
+    return details.join(", ") || `${comparison.matchedEntries}/${comparison.baselineEntryCount} baseline entries match`;
 }
 function mapTrustStatusToAssessment(status) {
     switch (status) {

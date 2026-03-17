@@ -8,7 +8,15 @@ const path = require("node:path");
 const { makeTempDir } = require("./helpers/fixture.js");
 const { parseFrontmatter } = require("../dist/lib/frontmatter.js");
 const { lintSkill } = require("../dist/lib/skill.js");
-const { buildArchiveReport, buildReviewReport, compareArchiveToSource, packSkill, reviewSkill } = require("../dist/lib/workflow.js");
+const {
+  buildArchiveReport,
+  buildReviewReport,
+  compareArchiveToSource,
+  compareArchives,
+  packSkill,
+  reviewSkill,
+  summarizeReleaseDelta
+} = require("../dist/lib/workflow.js");
 const {
   classifyLintResult,
   evaluateDetectionCases,
@@ -256,6 +264,73 @@ Catch broken script packaging before release.
     result.issues.map((issue) => issue.message).join("\n"),
     /Script is not executable: scripts\/example\.sh/
   );
+});
+
+test("workflow helpers can compare archives across releases", async () => {
+  const tempDir = await makeTempDir("openclaw-release-compare-");
+  const skillDir = path.join(tempDir, "skill");
+  const baselineArchivePath = path.join(tempDir, "baseline.skill");
+  const currentArchivePath = path.join(tempDir, "current.skill");
+  await fs.mkdir(path.join(skillDir, "references"), { recursive: true });
+  await fs.writeFile(path.join(skillDir, "references", "README.md"), "# Guide\nOriginal\n");
+  await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
+name: release-compare
+description: Compare shipped skill archives between releases.
+version: 1.0.0
+---
+
+# Release Compare
+
+## Purpose
+Compare release artifacts.
+
+## Workflow
+1. Inspect the baseline release.
+2. Inspect the new release.
+
+## Constraints
+- Keep packaging deterministic.
+`);
+
+  await packSkill(skillDir, baselineArchivePath);
+  await fs.appendFile(path.join(skillDir, "references", "README.md"), "Updated\n");
+  await fs.writeFile(path.join(skillDir, "assets.md"), "new file\n");
+  await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
+name: release-compare
+description: Compare shipped skill archives between releases.
+version: 1.1.0
+---
+
+# Release Compare
+
+## Purpose
+Compare release artifacts.
+
+## Workflow
+1. Inspect the baseline release.
+2. Inspect the new release.
+
+## Constraints
+- Keep packaging deterministic.
+`);
+
+  await packSkill(skillDir, currentArchivePath);
+
+  const compared = await compareArchives(currentArchivePath, baselineArchivePath);
+
+  assert.equal(compared.releaseComparison.matches, false);
+  assert.equal(compared.releaseComparison.metadataDifferences.some((entry) => entry.field === "version"), true);
+  assert.equal(compared.releaseComparison.changedEntries.some((entry) => entry.path === "references/README.md"), true);
+  assert.deepEqual(compared.releaseComparison.addedEntries, ["assets.md"]);
+
+  const summary = summarizeReleaseDelta(compared);
+  assert.equal(summary.status, "release-changed");
+  assert.match(summary.headline, /Release delta detected/);
+
+  const report = buildArchiveReport(compared);
+  assert.match(report, /## Release Delta/);
+  assert.match(report, /### Changed Since Baseline/);
+  assert.match(report, /### Added Since Baseline/);
 });
 
 test("compareArchiveToSource detects drift and manifest hashes after packaging", async () => {

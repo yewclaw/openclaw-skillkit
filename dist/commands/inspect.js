@@ -3,19 +3,30 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.runInspect = runInspect;
 const workflow_1 = require("../lib/workflow");
 async function runInspect(archivePath, options) {
-    const inspected = options.sourceDir
-        ? await (0, workflow_1.compareArchiveToSource)(archivePath, options.sourceDir)
-        : await (0, workflow_1.inspectSkillArchive)(archivePath);
+    let inspected = await (0, workflow_1.inspectSkillArchive)(archivePath);
+    if (options.sourceDir) {
+        inspected = await (0, workflow_1.compareArchiveToSource)(archivePath, options.sourceDir);
+    }
+    if (options.baselineArchivePath) {
+        const compared = await (0, workflow_1.compareArchives)(archivePath, options.baselineArchivePath);
+        inspected = {
+            ...inspected,
+            releaseComparison: compared.releaseComparison
+        };
+    }
     const reportPath = await (0, workflow_1.writeArchiveReport)(inspected.archivePath, inspected, options.reportPath);
     const trust = (0, workflow_1.summarizeArchiveTrust)(inspected);
+    const releaseDelta = (0, workflow_1.summarizeReleaseDelta)(inspected);
     if (options.format === "json") {
         console.log(JSON.stringify({
             archivePath: inspected.archivePath,
             trustSummary: trust,
+            releaseDeltaSummary: releaseDelta,
             manifest: inspected.manifest,
             reportPath,
             reportMarkdown: (0, workflow_1.buildArchiveReport)(inspected),
-            comparison: "comparison" in inspected ? inspected.comparison : undefined
+            comparison: "comparison" in inspected ? inspected.comparison : undefined,
+            releaseComparison: "releaseComparison" in inspected ? inspected.releaseComparison : undefined
         }, null, 2));
         return;
     }
@@ -53,8 +64,33 @@ async function runInspect(archivePath, options) {
             console.log(`  New in source: ${comparison.extraSourceEntries.join(", ")}`);
         }
     }
+    if (hasReleaseComparison(inspected)) {
+        const { releaseComparison } = inspected;
+        console.log(`  Release delta: ${releaseDelta.headline}`);
+        console.log(`  Baseline archive: ${releaseComparison.baselineArchivePath}`);
+        console.log(`  Delta: ${releaseComparison.matches ? "matches baseline archive" : "release changed"} (${releaseComparison.matchedEntries}/${releaseComparison.baselineEntryCount} baseline entries unchanged).`);
+        if (releaseComparison.metadataDifferences.length > 0) {
+            console.log(`  Metadata changes: ${releaseComparison.metadataDifferences
+                .map((difference) => `${difference.field} current="${difference.currentValue}" baseline="${difference.baselineValue}"`)
+                .join("; ")}`);
+        }
+        if (releaseComparison.changedEntries.length > 0) {
+            console.log(`  Changed since baseline: ${releaseComparison.changedEntries
+                .map((entry) => `${entry.path} (${entry.reason}, current ${(0, workflow_1.formatBytes)(entry.currentSize)}, baseline ${(0, workflow_1.formatBytes)(entry.baselineSize)})`)
+                .join(", ")}`);
+        }
+        if (releaseComparison.addedEntries.length > 0) {
+            console.log(`  Added since baseline: ${releaseComparison.addedEntries.join(", ")}`);
+        }
+        if (releaseComparison.removedEntries.length > 0) {
+            console.log(`  Removed since baseline: ${releaseComparison.removedEntries.join(", ")}`);
+        }
+    }
     if (!hasComparison(inspected)) {
         console.log(`  Next: run openclaw-skillkit inspect ${inspected.archivePath} --source ./path-to-skill to check for drift.`);
+    }
+    if (!hasReleaseComparison(inspected)) {
+        console.log(`  Release history: run openclaw-skillkit inspect ${inspected.archivePath} --against ./previous-release.skill to compare against a prior artifact.`);
     }
     if (reportPath) {
         console.log(`  Report: ${reportPath}`);
@@ -62,6 +98,9 @@ async function runInspect(archivePath, options) {
 }
 function hasComparison(value) {
     return Boolean(value.comparison);
+}
+function hasReleaseComparison(value) {
+    return Boolean(value.releaseComparison);
 }
 function formatInspectStatus(result) {
     if (!result.comparison) {

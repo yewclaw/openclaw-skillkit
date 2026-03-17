@@ -1,9 +1,12 @@
 import {
   buildArchiveReport,
+  compareArchives,
   type ArchiveSourceComparison,
+  type ArchiveReleaseComparison,
   compareArchiveToSource,
   formatBytes,
   inspectSkillArchive,
+  summarizeReleaseDelta,
   summarizeArchiveTrust,
   writeArchiveReport
 } from "../lib/workflow";
@@ -11,15 +14,28 @@ import {
 export interface RunInspectOptions {
   format: "text" | "json";
   sourceDir?: string;
+  baselineArchivePath?: string;
   reportPath?: string | boolean;
 }
 
 export async function runInspect(archivePath: string, options: RunInspectOptions): Promise<void> {
-  const inspected = options.sourceDir
-    ? await compareArchiveToSource(archivePath, options.sourceDir)
-    : await inspectSkillArchive(archivePath);
+  let inspected = await inspectSkillArchive(archivePath);
+
+  if (options.sourceDir) {
+    inspected = await compareArchiveToSource(archivePath, options.sourceDir);
+  }
+
+  if (options.baselineArchivePath) {
+    const compared = await compareArchives(archivePath, options.baselineArchivePath);
+    inspected = {
+      ...inspected,
+      releaseComparison: compared.releaseComparison
+    };
+  }
+
   const reportPath = await writeArchiveReport(inspected.archivePath, inspected, options.reportPath);
   const trust = summarizeArchiveTrust(inspected);
+  const releaseDelta = summarizeReleaseDelta(inspected);
 
   if (options.format === "json") {
     console.log(
@@ -27,10 +43,12 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
         {
           archivePath: inspected.archivePath,
           trustSummary: trust,
+          releaseDeltaSummary: releaseDelta,
           manifest: inspected.manifest,
           reportPath,
           reportMarkdown: buildArchiveReport(inspected),
-          comparison: "comparison" in inspected ? inspected.comparison : undefined
+          comparison: "comparison" in inspected ? inspected.comparison : undefined,
+          releaseComparison: "releaseComparison" in inspected ? inspected.releaseComparison : undefined
         },
         null,
         2
@@ -91,8 +109,53 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
     }
   }
 
+  if (hasReleaseComparison(inspected)) {
+    const { releaseComparison } = inspected;
+    console.log(`  Release delta: ${releaseDelta.headline}`);
+    console.log(`  Baseline archive: ${releaseComparison.baselineArchivePath}`);
+    console.log(
+      `  Delta: ${releaseComparison.matches ? "matches baseline archive" : "release changed"} (${releaseComparison.matchedEntries}/${releaseComparison.baselineEntryCount} baseline entries unchanged).`
+    );
+
+    if (releaseComparison.metadataDifferences.length > 0) {
+      console.log(
+        `  Metadata changes: ${releaseComparison.metadataDifferences
+          .map(
+            (difference) =>
+              `${difference.field} current="${difference.currentValue}" baseline="${difference.baselineValue}"`
+          )
+          .join("; ")}`
+      );
+    }
+
+    if (releaseComparison.changedEntries.length > 0) {
+      console.log(
+        `  Changed since baseline: ${releaseComparison.changedEntries
+          .map(
+            (entry) =>
+              `${entry.path} (${entry.reason}, current ${formatBytes(entry.currentSize)}, baseline ${formatBytes(entry.baselineSize)})`
+          )
+          .join(", ")}`
+      );
+    }
+
+    if (releaseComparison.addedEntries.length > 0) {
+      console.log(`  Added since baseline: ${releaseComparison.addedEntries.join(", ")}`);
+    }
+
+    if (releaseComparison.removedEntries.length > 0) {
+      console.log(`  Removed since baseline: ${releaseComparison.removedEntries.join(", ")}`);
+    }
+  }
+
   if (!hasComparison(inspected)) {
     console.log(`  Next: run openclaw-skillkit inspect ${inspected.archivePath} --source ./path-to-skill to check for drift.`);
+  }
+
+  if (!hasReleaseComparison(inspected)) {
+    console.log(
+      `  Release history: run openclaw-skillkit inspect ${inspected.archivePath} --against ./previous-release.skill to compare against a prior artifact.`
+    );
   }
 
   if (reportPath) {
@@ -104,6 +167,16 @@ function hasComparison(
   value: { archivePath: string; manifest: unknown; comparison?: ArchiveSourceComparison }
 ): value is { archivePath: string; manifest: { entries: Array<{ path: string; size: number }> }; comparison: ArchiveSourceComparison } {
   return Boolean(value.comparison);
+}
+
+function hasReleaseComparison(
+  value: { archivePath: string; manifest: unknown; releaseComparison?: ArchiveReleaseComparison }
+): value is {
+  archivePath: string;
+  manifest: { entries: Array<{ path: string; size: number }> };
+  releaseComparison: ArchiveReleaseComparison;
+} {
+  return Boolean(value.releaseComparison);
 }
 
 function formatInspectStatus(result: { comparison?: ArchiveSourceComparison }): string {

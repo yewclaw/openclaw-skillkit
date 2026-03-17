@@ -103,7 +103,7 @@ async function handlePack(parsed) {
     });
 }
 async function handleInspect(parsed) {
-    assertNoUnexpectedFlags(parsed, ["format", "json", "source", "report"]);
+    assertNoUnexpectedFlags(parsed, ["format", "json", "source", "against", "report"]);
     assertArgumentCount(parsed, 1, "inspect expects exactly 1 archive path.");
     const archivePath = parsed.positionals[0];
     if (!archivePath) {
@@ -112,6 +112,7 @@ async function handleInspect(parsed) {
     await (0, inspect_1.runInspect)(archivePath, {
         format: parseMachineFormat(parsed, "inspect"),
         sourceDir: typeof (0, args_1.getFlag)(parsed, "source") === "string" ? String((0, args_1.getFlag)(parsed, "source")) : undefined,
+        baselineArchivePath: typeof (0, args_1.getFlag)(parsed, "against") === "string" ? String((0, args_1.getFlag)(parsed, "against")) : undefined,
         reportPath: parseOptionalPathFlag(parsed, "report")
     });
 }
@@ -209,11 +210,13 @@ Examples:
 Inspect a packaged .skill archive and print the embedded manifest.
 
 Usage:
-  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--report [./artifacts/customer-support.report.md]] [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--report [./artifacts/customer-support.report.md]] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit inspect ./artifacts/customer-support.skill
   openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
+  openclaw-skillkit inspect ./artifacts/customer-support.skill --against ./artifacts/customer-support-prev.skill
+  openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
   openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
   openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 `);
@@ -258,7 +261,7 @@ Usage:
   openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
   openclaw-skillkit lint [dir] [--json|--format text|json]
   openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
-  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
   openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
 
