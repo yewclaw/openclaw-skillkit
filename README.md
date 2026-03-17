@@ -6,9 +6,9 @@
   <img src="https://img.shields.io/badge/verify-npm%20run%20verify-0A7F5A" alt="Verify with npm run verify" />
 </p>
 
-<p align="center"><strong>Build, lint, package, inspect, and demo OpenClaw skills with a lean Node.js toolkit.</strong></p>
+<p align="center"><strong>The official-feeling toolkit for authoring, validating, packaging, and demoing OpenClaw skills.</strong></p>
 
-`openclaw-skillkit` turns skill authoring into a repeatable workflow instead of a folder of markdown that drifts over time. It gives you a scaffold, concrete validation, packaging that refuses broken skills, and a benchmark loop you can run locally or in CI.
+`openclaw-skillkit` turns skill authoring into a repeatable product workflow instead of a folder of markdown that drifts over time. It gives you one toolkit with two aligned surfaces: a strong CLI for day-to-day work and a local Skill Studio for demos, onboarding, and review.
 
 <p align="center">
   <img src="./docs/assets/skillkit-flow.svg" alt="Workflow diagram showing init, author, lint, pack, and benchmark steps in openclaw-skillkit." width="920" />
@@ -25,6 +25,15 @@
 | `serve` | Launch a local Skill Studio web UI for demos, examples, linting, packaging, and archive inspection. |
 | `benchmark` | Measure fixture detection quality and CLI round-trip performance with repeatable runs. |
 
+## One Toolkit, Two Surfaces
+
+Use the CLI when you want speed and scripting. Use Skill Studio when you want a clearer authoring flow, example-driven onboarding, or a more legible demo for other people. Both surfaces run the same real workflow:
+
+1. initialize or load a skill
+2. lint it with concrete fix guidance
+3. package a `.skill` archive
+4. inspect the shipped manifest
+
 ## Why This Exists
 
 Most skill repos lose trust for predictable reasons:
@@ -35,7 +44,7 @@ Most skill repos lose trust for predictable reasons:
 - packaging becomes manual, so validation gets skipped
 - quality debates stay subjective because nobody runs the same checks
 
-`openclaw-skillkit` keeps the workflow small: create, author, lint, pack, benchmark.
+`openclaw-skillkit` keeps the workflow small: create, author, lint, pack, inspect, benchmark.
 
 ## Quickstart
 
@@ -48,7 +57,7 @@ npm install
 npm run verify
 ```
 
-Launch the local studio if you want a more demoable workflow:
+Launch the local studio if you want the guided authoring workflow:
 
 ```bash
 npm run ui
@@ -77,6 +86,13 @@ node bench/index.js --iterations 3
 ## Local Studio
 
 `openclaw-skillkit serve` starts a lightweight local web interface on `http://127.0.0.1:3210` by default. It uses the same real workflow as the CLI, not mocked demo actions.
+
+Skill Studio is designed to feel like the product surface for the toolkit, not a separate experiment. It makes the path through skill authoring explicit:
+
+- start from an example or scaffold a new skill
+- see the current workflow status at a glance
+- get clearer empty states and recommended next actions after each operation
+- move directly from packaging into archive inspection without re-entering paths
 
 Use it to:
 

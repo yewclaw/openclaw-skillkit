@@ -13,12 +13,19 @@ test("studio assets expose the local app shell and workflow controls", () => {
   const assets = getStudioAssets();
 
   assert.match(assets.html, /OpenClaw Skill Studio/);
+  assert.match(assets.html, /One Clear Skill Pipeline/);
+  assert.match(assets.html, /id="status-title"/);
   assert.match(assets.html, /id="init-form"/);
   assert.match(assets.html, /id="inspect-form"/);
+  assert.match(assets.html, /Recommended flow:/);
   assert.match(assets.css, /\.hero/);
+  assert.match(assets.css, /\.step-grid/);
+  assert.match(assets.css, /\.status-banner/);
   assert.match(assets.css, /\.panel/);
   assert.match(assets.js, /api\("\/api\/lint"/);
   assert.match(assets.js, /formatPackResult/);
+  assert.match(assets.js, /setStatus\("Ready to author"/);
+  assert.match(assets.js, /Recommended command:/);
 });
 
 test("workflow helpers surface example skills for the studio", async () => {

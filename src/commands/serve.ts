@@ -263,23 +263,69 @@ const HTML_PAGE = String.raw`<!doctype html>
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Local Studio</p>
+          <p class="eyebrow">Official Workflow</p>
           <h1>OpenClaw Skill Studio</h1>
           <p class="subtitle">
-            A lightweight local interface for scaffolding, validating, packaging, and inspecting real skills.
+            The local authoring surface for OpenClaw skills. Start from a real scaffold, validate the skill, package
+            it, and inspect the final artifact before you share it.
           </p>
+          <div class="hero-actions">
+            <span class="hero-badge">Runs fully local</span>
+            <span class="hero-badge">Uses the same workflow as the CLI</span>
+          </div>
         </div>
         <div class="hero-stats">
           <div class="stat-card">
-            <span class="stat-label">Mode</span>
-            <strong>Zero-dependency web UI</strong>
+            <span class="stat-label">Surfaces</span>
+            <strong>CLI and Studio stay aligned</strong>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Backed by</span>
-            <strong>The same workflow as the CLI</strong>
+            <span class="stat-label">Best for</span>
+            <strong>Demos, onboarding, and local skill reviews</strong>
           </div>
         </div>
       </header>
+
+      <section class="workflow-strip panel panel-wide">
+        <div class="panel-header compact">
+          <div>
+            <p class="eyebrow">Workflow</p>
+            <h2>One Clear Skill Pipeline</h2>
+          </div>
+          <p class="workflow-summary">Create or load a skill, lint it, package it, then inspect the shipped archive.</p>
+        </div>
+        <div class="step-grid">
+          <article class="step-card">
+            <span class="step-index">01</span>
+            <strong>Create</strong>
+            <p>Initialize a new skill or use an example to prefill the studio.</p>
+          </article>
+          <article class="step-card">
+            <span class="step-index">02</span>
+            <strong>Validate</strong>
+            <p>Run lint to catch metadata, structure, content, and reference issues early.</p>
+          </article>
+          <article class="step-card">
+            <span class="step-index">03</span>
+            <strong>Package</strong>
+            <p>Produce a real <code>.skill</code> archive only after validation passes.</p>
+          </article>
+          <article class="step-card">
+            <span class="step-index">04</span>
+            <strong>Inspect</strong>
+            <p>Review the packaged manifest so the final artifact is easy to trust.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="status-banner panel panel-wide">
+        <div>
+          <p class="eyebrow">Studio Status</p>
+          <strong id="status-title">Ready to author</strong>
+          <p id="status-body" class="status-copy">Pick an example or initialize a new skill to start the workflow.</p>
+        </div>
+        <code id="cwd"></code>
+      </section>
 
       <main class="grid">
         <section class="panel panel-wide">
@@ -287,8 +333,8 @@ const HTML_PAGE = String.raw`<!doctype html>
             <div>
               <p class="eyebrow">Examples</p>
               <h2>Start From a Real Skill</h2>
+              <p class="panel-copy">Use an example to preload the authoring and archive fields with a working skill.</p>
             </div>
-            <code id="cwd"></code>
           </div>
           <div id="example-list" class="example-grid"></div>
         </section>
@@ -298,12 +344,14 @@ const HTML_PAGE = String.raw`<!doctype html>
             <div>
               <p class="eyebrow">Create</p>
               <h2>Initialize a Skill</h2>
+              <p class="panel-copy">Scaffold a clean starting point with the same templates available from the CLI.</p>
             </div>
           </div>
           <form id="init-form" class="stack">
             <label>
               <span>Target directory</span>
               <input name="targetDir" placeholder="./skills/customer-support" required />
+              <small>Create a new skill folder or point at an existing draft you want to re-scaffold.</small>
             </label>
             <label>
               <span>Skill name</span>
@@ -328,7 +376,12 @@ const HTML_PAGE = String.raw`<!doctype html>
             <label class="checkbox-row"><input type="checkbox" name="force" /> Overwrite existing SKILL.md if present</label>
             <button type="submit">Create skill</button>
           </form>
-          <pre id="init-result" class="result-card muted">No skill initialized yet.</pre>
+          <pre id="init-result" class="result-card muted">No skill initialized yet.
+
+Recommended flow:
+1. Choose a target directory and template.
+2. Create the scaffold.
+3. Edit SKILL.md, then lint and package it.</pre>
         </section>
 
         <section class="panel">
@@ -336,12 +389,14 @@ const HTML_PAGE = String.raw`<!doctype html>
             <div>
               <p class="eyebrow">Validate</p>
               <h2>Lint and Package</h2>
+              <p class="panel-copy">Keep the working directory and output archive together so the next step stays obvious.</p>
             </div>
           </div>
           <form id="lint-form" class="stack">
             <label>
               <span>Skill directory</span>
               <input name="targetDir" id="skill-dir-input" placeholder="./examples/weather-research-skill" required />
+              <small>Point this at the root folder that contains <code>SKILL.md</code>.</small>
             </label>
             <div class="button-row">
               <button type="submit">Run lint</button>
@@ -352,8 +407,15 @@ const HTML_PAGE = String.raw`<!doctype html>
             <span>Archive output path</span>
             <input id="output-path-input" placeholder="./artifacts/customer-support.skill" />
           </label>
-          <pre id="lint-result" class="result-card muted">Lint output will appear here.</pre>
-          <pre id="pack-result" class="result-card muted">Pack output will appear here.</pre>
+          <pre id="lint-result" class="result-card muted">Lint output will appear here.
+
+Expected outcome:
+- zero blocking errors
+- a short action plan
+- a clear pack command when the skill is ready</pre>
+          <pre id="pack-result" class="result-card muted">Pack output will appear here.
+
+When packaging succeeds, the inspect form will be prefilled automatically.</pre>
         </section>
 
         <section class="panel panel-wide">
@@ -361,6 +423,7 @@ const HTML_PAGE = String.raw`<!doctype html>
             <div>
               <p class="eyebrow">Inspect</p>
               <h2>Review a Packaged Archive</h2>
+              <p class="panel-copy">Inspect the shipped manifest, not just the source folder, before handing the skill off.</p>
             </div>
           </div>
           <form id="inspect-form" class="stack inline-form">
@@ -370,7 +433,9 @@ const HTML_PAGE = String.raw`<!doctype html>
             </label>
             <button type="submit">Inspect archive</button>
           </form>
-          <pre id="inspect-result" class="result-card muted">Manifest details will appear here.</pre>
+          <pre id="inspect-result" class="result-card muted">Manifest details will appear here.
+
+Use this after packaging to verify the final archive contents and metadata.</pre>
         </section>
       </main>
     </div>
@@ -487,6 +552,21 @@ h2 {
   color: var(--muted);
 }
 
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.hero-badge {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(15, 108, 82, 0.1);
+  color: var(--accent-strong);
+  font-size: 0.88rem;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -507,6 +587,68 @@ h2 {
   gap: 16px;
   align-items: flex-start;
   margin-bottom: 18px;
+}
+
+.panel-header.compact {
+  margin-bottom: 14px;
+}
+
+.panel-copy,
+.workflow-summary,
+.status-copy,
+small {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+small {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.workflow-strip,
+.status-banner {
+  margin-bottom: 20px;
+}
+
+.status-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: end;
+}
+
+.step-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.step-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(21, 28, 22, 0.04);
+  border: 1px solid rgba(36, 42, 36, 0.08);
+}
+
+.step-card strong,
+.step-card p {
+  display: block;
+}
+
+.step-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.step-index {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--accent-strong);
 }
 
 .example-grid {
@@ -659,6 +801,10 @@ button:disabled {
   color: #ffc7ba;
 }
 
+.result-card.status-ok {
+  color: #edf6ef;
+}
+
 code {
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 0.92rem;
@@ -669,6 +815,15 @@ code {
   .hero,
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .step-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-banner {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .inline-form {
@@ -696,9 +851,12 @@ const lintResult = document.querySelector("#lint-result");
 const packResult = document.querySelector("#pack-result");
 const inspectResult = document.querySelector("#inspect-result");
 const packButton = document.querySelector("#pack-button");
+const statusTitle = document.querySelector("#status-title");
+const statusBody = document.querySelector("#status-body");
 
 boot().catch((error) => {
   renderResult(initResult, error.message, true);
+  setStatus("Studio failed to load", error.message, "error");
 });
 
 async function boot() {
@@ -708,11 +866,12 @@ async function boot() {
   cwdLabel.textContent = payload.cwd;
   templateSelect.innerHTML = state.templates.map((template) => '<option value="' + template + '">' + template + "</option>").join("");
   renderExamples();
+  setStatus("Ready to author", "Pick an example or initialize a new skill to start the workflow.", "neutral");
 }
 
 function renderExamples() {
   if (state.examples.length === 0) {
-    exampleList.innerHTML = '<p>No examples found.</p>';
+    exampleList.innerHTML = '<article class="example-card"><strong>No examples found</strong><p>Add example skills to the repository to make the studio easier to demo and review.</p></article>';
     return;
   }
 
@@ -736,6 +895,7 @@ function renderExamples() {
       const value = button.getAttribute("data-use-path");
       skillDirInput.value = value;
       outputPathInput.value = value + ".skill";
+      setStatus("Example loaded", "The skill directory is prefilled. Run lint when you are ready to validate it.", "ok");
     });
   }
 
@@ -743,6 +903,7 @@ function renderExamples() {
     button.addEventListener("click", () => {
       const value = button.getAttribute("data-use-archive");
       archivePathInput.value = value;
+      setStatus("Archive path loaded", "The inspect form is prefilled with an example archive path.", "ok");
     });
   }
 }
@@ -766,13 +927,22 @@ initForm.addEventListener("submit", async (event) => {
     skillDirInput.value = result.targetDir;
     outputPathInput.value = result.targetDir + ".skill";
     renderResult(initResult, [
-      "Initialized " + result.targetDir,
+      "Skill scaffold created",
+      "",
+      "Target: " + result.targetDir,
       "Template: " + result.template,
       "Resources: " + (result.resources.length ? result.resources.join(", ") : "none"),
-      "Skill file: " + result.skillFile
+      "Skill file: " + result.skillFile,
+      "",
+      "Next:",
+      "1. Edit SKILL.md with real instructions.",
+      "2. Run lint in the Validate panel.",
+      "3. Package the skill once lint is clean."
     ].join("\n"));
+    setStatus("Skill initialized", "The working directory and output archive path have been prefilled for the next steps.", "ok");
   } catch (error) {
     renderResult(initResult, error.message, true);
+    setStatus("Init failed", error.message, "error");
   } finally {
     setBusy(submitButton, false);
   }
@@ -788,8 +958,16 @@ lintForm.addEventListener("submit", async (event) => {
       targetDir: skillDirInput.value
     });
     renderResult(lintResult, formatLintResult(result), !result.ok);
+    setStatus(
+      result.ok ? "Lint passed" : "Lint found issues",
+      result.ok
+        ? "This skill is ready for packaging. Use the Package button to create an archive."
+        : "Review the issues and action plan in the lint output before packaging.",
+      result.ok ? "ok" : "error"
+    );
   } catch (error) {
     renderResult(lintResult, error.message, true);
+    setStatus("Lint failed", error.message, "error");
   } finally {
     setBusy(submitButton, false);
   }
@@ -805,8 +983,10 @@ packButton.addEventListener("click", async () => {
     });
     archivePathInput.value = result.archivePath;
     renderResult(packResult, formatPackResult(result));
+    setStatus("Archive packaged", "The inspect form now points at the new archive so you can review the shipped manifest.", "ok");
   } catch (error) {
     renderResult(packResult, error.message, true);
+    setStatus("Packaging failed", error.message, "error");
   } finally {
     setBusy(packButton, false);
   }
@@ -822,8 +1002,10 @@ inspectForm.addEventListener("submit", async (event) => {
       archivePath: archivePathInput.value
     });
     renderResult(inspectResult, formatInspectResult(result));
+    setStatus("Archive inspected", "You are looking at the packaged manifest rather than the source directory.", "ok");
   } catch (error) {
     renderResult(inspectResult, error.message, true);
+    setStatus("Inspect failed", error.message, "error");
   } finally {
     setBusy(submitButton, false);
   }
@@ -846,6 +1028,8 @@ async function api(url, body) {
 
 function formatLintResult(result) {
   const lines = [
+    result.ok ? "Lint passed" : "Lint found issues",
+    "",
     "Directory: " + result.skillDir,
     "Files checked: " + result.fileCount,
     "Summary: " + result.summary.errors + " error(s), " + result.summary.warnings + " warning(s)"
@@ -873,11 +1057,17 @@ function formatLintResult(result) {
     result.nextSteps.forEach((step, index) => lines.push((index + 1) + ". " + step));
   }
 
+  if (result.ok) {
+    lines.push("", "Recommended command:", "openclaw-skillkit pack " + result.skillDir);
+  }
+
   return lines.join("\n");
 }
 
 function formatPackResult(result) {
   const lines = [
+    "Archive packaged",
+    "",
     "Archive ready: " + result.archivePath,
     "Size: " + result.archiveSizeLabel,
     "Skill: " + result.manifest.skill.name + "@" + result.manifest.skill.version,
@@ -896,12 +1086,16 @@ function formatPackResult(result) {
     lines.push("- " + entry.path + " (" + entry.size + " B)");
   }
 
+  lines.push("", "Recommended command:", "openclaw-skillkit inspect " + result.archivePath);
+
   return lines.join("\n");
 }
 
 function formatInspectResult(result) {
   const manifest = result.manifest;
   const lines = [
+    "Archive inspection",
+    "",
     "Archive: " + result.archivePath,
     "Skill: " + manifest.skill.name + "@" + manifest.skill.version,
     "Description: " + manifest.skill.description,
@@ -920,7 +1114,14 @@ function formatInspectResult(result) {
 function renderResult(element, text, isError = false) {
   element.textContent = text;
   element.classList.toggle("status-error", Boolean(isError));
+  element.classList.toggle("status-ok", !isError);
   element.classList.remove("muted");
+}
+
+function setStatus(title, body, tone) {
+  statusTitle.textContent = title;
+  statusBody.textContent = body;
+  statusBody.classList.toggle("status-error", tone === "error");
 }
 
 function setBusy(button, isBusy) {

@@ -1,7 +1,7 @@
 {
   "name": "openclaw-skillkit",
   "version": "0.1.0",
-  "description": "Build, lint, and pack OpenClaw skills with a lean Node.js CLI.",
+  "description": "Author, lint, package, inspect, and demo OpenClaw skills with aligned CLI and Studio workflows.",
   "license": "MIT",
   "type": "commonjs",
   "bin": {
