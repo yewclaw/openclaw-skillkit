@@ -22,6 +22,7 @@
 | `lint` | Catch weak metadata, placeholder copy, missing sections, and broken local references before review. |
 | `pack` | Create a `.skill` archive only after validation passes, with a manifest and optional release report for inspection. |
 | `inspect` | Read a packaged archive back out, verify exactly what it contains, and optionally export a handoff report. |
+| `review` | Run a release-readiness pass that lints, packages, verifies source-to-artifact parity, and emits one review report. |
 | `serve` | Launch a local Skill Studio web UI for demos, examples, linting, packaging, and archive inspection. |
 | `benchmark` | Measure fixture detection quality and CLI round-trip performance with repeatable runs. |
 
@@ -32,7 +33,7 @@ Use the CLI when you want speed and scripting. Use Skill Studio when you want a 
 1. initialize or load a skill
 2. lint it with concrete fix guidance
 3. package a `.skill` archive
-4. inspect the shipped manifest
+4. inspect or review the shipped artifact
 
 ## Why This Exists
 
@@ -71,6 +72,7 @@ $EDITOR skills/customer-support/SKILL.md
 npx openclaw-skillkit lint skills/customer-support
 npx openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
 npx openclaw-skillkit inspect ./artifacts/customer-support.skill
+npx openclaw-skillkit review skills/customer-support --output ./artifacts/customer-support.skill --report
 ```
 
 If you want to use the checked-in build directly:
@@ -100,6 +102,7 @@ Use it to:
 - load example skills as starting points
 - lint a local skill directory and review fix guidance
 - package a `.skill` archive and inspect the bundled manifest
+- run one release-readiness review that combines lint, packaging, and artifact verification
 
 Run it with either command:
 
@@ -275,6 +278,23 @@ Adding `--source` compares the archive to a current skill directory so you can c
 
 Adding `--report` exports the same inspection as a Markdown review artifact that is easier to attach to release notes, share in PRs, or hand to reviewers who do not want raw JSON.
 
+### 5. Run a release-readiness review before handoff
+
+`review` is the lean preflight command for answering "is this skill actually ready to ship?" without manually chaining multiple steps. It:
+
+- runs lint and summarizes blocking issues and warnings
+- packages the skill when lint passes
+- compares the packaged archive back to the current source directory
+- optionally writes a Markdown readiness report for handoff or release notes
+
+```bash
+openclaw-skillkit review skills/customer-support
+openclaw-skillkit review skills/customer-support --output ./artifacts/customer-support.skill --report
+openclaw-skillkit review skills/customer-support --json
+```
+
+If blocking lint errors remain, `review` exits non-zero and does not create an archive. When the skill is ready, the report captures both authoring quality and artifact trust in one place.
+
 ## Commands
 
 | Command | Purpose |
@@ -284,6 +304,7 @@ Adding `--report` exports the same inspection as a Markdown review artifact that
 | `openclaw-skillkit help lint` | Show lint modes, including JSON output. |
 | `openclaw-skillkit help pack` | Show packaging behavior, output options, JSON reporting, and report export. |
 | `openclaw-skillkit help inspect` | Show artifact inspection, drift comparison, and report export usage. |
+| `openclaw-skillkit help review` | Show the combined release-readiness workflow and report export usage. |
 | `openclaw-skillkit help serve` | Show local studio host and port options. |
 | `openclaw-skillkit serve` | Start the local Skill Studio web interface. |
 | `npm run benchmark -- --help` | Show benchmark runner flags. |
@@ -306,6 +327,7 @@ The repo keeps the trust boundary explicit:
 - `pack` is gated by lint, so broken skills do not get archived by accident
 - packaged archives include skill metadata plus per-file sizes and hashes, and avoid recursively bundling old `.skill` artifacts
 - `inspect` lets authors and reviewers confirm the manifest from the built artifact itself, compare it against the current source directory for drift, and export a review-ready Markdown report
+- `review` provides a single readiness verdict that covers lint status, archive creation, and source-to-artifact parity before handoff
 - fixture-driven tests cover parsing, linting, CLI behavior, and archive contents
 - `npm run verify` runs tests and benchmarks, and also typechecks plus rebuilds `dist/` when the local TypeScript compiler is available
 - GitHub Actions runs the same `npm run verify` command on pushes and pull requests

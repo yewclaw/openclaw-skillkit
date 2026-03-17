@@ -142,6 +142,17 @@ async function handleRequest(request, response) {
             });
             return;
         }
+        if (method === "POST" && url.pathname === "/api/review") {
+            const body = await readJsonBody(request);
+            const targetDir = requireString(body.targetDir, "targetDir");
+            const outputPath = typeof body.outputPath === "string" && body.outputPath.trim() ? body.outputPath : undefined;
+            const review = await (0, workflow_1.reviewSkill)(targetDir, outputPath);
+            sendJson(response, 200, {
+                ...review,
+                reportMarkdown: (0, workflow_1.buildReviewReport)(review)
+            });
+            return;
+        }
         if (method === "POST" && url.pathname === "/api/inspect") {
             const body = await readJsonBody(request);
             const archivePath = requireString(body.archivePath, "archivePath");
@@ -359,6 +370,7 @@ Recommended flow:
             <div class="button-row">
               <button type="submit">Run lint</button>
               <button type="button" id="pack-button" class="secondary">Package skill</button>
+              <button type="button" id="review-button" class="secondary">Review readiness</button>
             </div>
           </form>
           <label>
@@ -374,6 +386,9 @@ Expected outcome:
           <pre id="pack-result" class="result-card muted">Pack output will appear here.
 
 When packaging succeeds, the inspect form will be prefilled automatically.</pre>
+          <pre id="review-result" class="result-card muted">Review output will appear here.
+
+Use this when you want one release-readiness verdict with lint, packaging, and artifact checks together.</pre>
         </section>
 
         <section class="panel panel-wide">
@@ -811,8 +826,10 @@ const inspectSourceInput = document.querySelector("#inspect-source-input");
 const initResult = document.querySelector("#init-result");
 const lintResult = document.querySelector("#lint-result");
 const packResult = document.querySelector("#pack-result");
+const reviewResult = document.querySelector("#review-result");
 const inspectResult = document.querySelector("#inspect-result");
 const packButton = document.querySelector("#pack-button");
+const reviewButton = document.querySelector("#review-button");
 const statusTitle = document.querySelector("#status-title");
 const statusBody = document.querySelector("#status-body");
 
@@ -955,6 +972,40 @@ packButton.addEventListener("click", async () => {
     setStatus("Packaging failed", error.message, "error");
   } finally {
     setBusy(packButton, false);
+  }
+});
+
+reviewButton.addEventListener("click", async () => {
+  setBusy(reviewButton, true);
+
+  try {
+    const result = await api("/api/review", {
+      targetDir: skillDirInput.value,
+      outputPath: outputPathInput.value || undefined
+    });
+
+    if (result.archive) {
+      archivePathInput.value = result.archive.destination;
+      inspectSourceInput.value = result.skillDir;
+    }
+
+    renderResult(reviewResult, formatReviewResult(result), result.readiness === "not-ready");
+    setStatus(
+      result.readiness === "ready"
+        ? "Ready to ship"
+        : result.readiness === "ready-with-warnings"
+          ? "Ready with warnings"
+          : "Not ready",
+      result.readiness === "not-ready"
+        ? "Resolve the blocking issues in the review output before handing the skill off."
+        : "The review output now captures lint, archive, and artifact verification in one place.",
+      result.readiness === "not-ready" ? "error" : "ok"
+    );
+  } catch (error) {
+    renderResult(reviewResult, error.message, true);
+    setStatus("Review failed", error.message, "error");
+  } finally {
+    setBusy(reviewButton, false);
   }
 });
 
@@ -1131,6 +1182,57 @@ function formatInspectResult(result) {
   return lines.join("\n");
 }
 
+function formatReviewResult(result) {
+  const lines = [
+    "Release readiness review",
+    "",
+    "Directory: " + result.skillDir,
+    "Verdict: " + formatReadiness(result.readiness),
+    "Lint summary: " + result.lint.summary.errors + " error(s), " + result.lint.summary.warnings + " warning(s)",
+    "Files checked: " + result.lint.fileCount
+  ];
+
+  if (result.lint.focusAreas.length) {
+    lines.push("", "Focus areas:");
+    for (const area of result.lint.focusAreas) {
+      lines.push("- " + area.label + ": " + area.errors + " error(s), " + area.warnings + " warning(s)");
+    }
+  }
+
+  if (result.archive) {
+    lines.push(
+      "",
+      "Archive",
+      "Archive ready: " + result.archive.destination,
+      "Size: " + result.archive.archiveSizeLabel,
+      "Artifact check: " + (result.archive.comparison.matches ? "matches source" : "drift detected"),
+      "Matched entries: " + result.archive.comparison.matchedEntries + "/" + result.archive.comparison.entryCount
+    );
+  } else {
+    lines.push("", "Archive", "Archive not created because blocking lint errors remain.");
+  }
+
+  if (result.lint.issues.length) {
+    lines.push("", "Issues:");
+    for (const issue of result.lint.issues) {
+      lines.push("- " + issue.level.toUpperCase() + " [" + issue.code + "] " + issue.message);
+      if (issue.suggestion) {
+        lines.push("  Fix: " + issue.suggestion);
+      }
+    }
+  }
+
+  if (result.lint.nextSteps.length) {
+    lines.push("", "Next steps:");
+    result.lint.nextSteps.forEach((step, index) => lines.push((index + 1) + ". " + step));
+  }
+
+  lines.push("", "Review report:");
+  lines.push(result.reportMarkdown);
+
+  return lines.join("\n");
+}
+
 function renderResult(element, text, isError = false) {
   element.textContent = text;
   element.classList.toggle("status-error", Boolean(isError));
@@ -1159,5 +1261,17 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function formatReadiness(readiness) {
+  if (readiness === "ready") {
+    return "ready to ship";
+  }
+
+  if (readiness === "ready-with-warnings") {
+    return "ready with warnings";
+  }
+
+  return "not ready";
 }
 `;

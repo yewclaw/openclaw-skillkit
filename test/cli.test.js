@@ -367,6 +367,15 @@ serialTest("cli help supports command-specific output", async () => {
   assert.match(result.stdout, /openclaw-skillkit pack$/m);
 });
 
+serialTest("cli help documents the review workflow", async () => {
+  const result = await runCli(["help", "review"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /openclaw-skillkit review/);
+  assert.match(result.stdout, /release-readiness review/);
+  assert.match(result.stdout, /my-skill\.review\.md/);
+});
+
 serialTest("cli help documents the local studio command", async () => {
   const result = await runCli(["help", "serve"]);
 
@@ -447,6 +456,40 @@ serialTest("cli inspect can export a markdown drift report", async () => {
   assert.match(report, /Status: drift detected/);
   assert.match(report, /### Changed Files/);
   assert.match(report, /references\/README\.md/);
+});
+
+serialTest("cli review packages a valid skill and reports readiness", async () => {
+  const tempDir = await makeTempDir("openclaw-review-cli-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  const reportPath = path.join(tempDir, "artifact.review.md");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+
+  const result = await runCli(["review", skillDir, "--output", outputPath, "--report", reportPath]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Readiness: READY TO SHIP/);
+  assert.match(result.stdout, /Artifact check: matches source/);
+  assert.match(result.stdout, /Report: /);
+  await fs.access(outputPath);
+  const report = await fs.readFile(reportPath, "utf8");
+  assert.match(report, /# OpenClaw Skill Review Report/);
+  assert.match(report, /Verdict: ready to ship/);
+});
+
+serialTest("cli review stops before packaging when the skill is not ready", async () => {
+  const tempDir = await makeTempDir("openclaw-review-cli-fail-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  await copyFixture(path.join("invalid", "bad-version-skill"), skillDir);
+
+  const result = await runCli(["review", skillDir, "--output", outputPath, "--json"]);
+
+  assert.equal(result.code, 1);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.readiness, "not-ready");
+  assert.equal(payload.archive, undefined);
+  await assert.rejects(fs.access(outputPath));
 });
 
 serialTest("cli rejects unknown flags with a clear error", async () => {

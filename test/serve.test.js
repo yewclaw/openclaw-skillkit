@@ -18,13 +18,17 @@ test("studio assets expose the local app shell and workflow controls", () => {
   assert.match(assets.html, /id="init-form"/);
   assert.match(assets.html, /id="inspect-form"/);
   assert.match(assets.html, /id="inspect-source-input"/);
+  assert.match(assets.html, /id="review-button"/);
+  assert.match(assets.html, /id="review-result"/);
   assert.match(assets.html, /Recommended flow:/);
   assert.match(assets.css, /\.hero/);
   assert.match(assets.css, /\.step-grid/);
   assert.match(assets.css, /\.status-banner/);
   assert.match(assets.css, /\.panel/);
   assert.match(assets.js, /api\("\/api\/lint"/);
+  assert.match(assets.js, /api\("\/api\/review"/);
   assert.match(assets.js, /formatPackResult/);
+  assert.match(assets.js, /formatReviewResult/);
   assert.match(assets.js, /compareArchiveToSource|source comparison/i);
   assert.match(assets.js, /Release report:/);
   assert.match(assets.js, /setStatus\("Ready to author"/);

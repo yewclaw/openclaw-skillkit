@@ -8,7 +8,7 @@ const path = require("node:path");
 const { makeTempDir } = require("./helpers/fixture.js");
 const { parseFrontmatter } = require("../dist/lib/frontmatter.js");
 const { lintSkill } = require("../dist/lib/skill.js");
-const { buildArchiveReport, compareArchiveToSource, packSkill } = require("../dist/lib/workflow.js");
+const { buildArchiveReport, buildReviewReport, compareArchiveToSource, packSkill, reviewSkill } = require("../dist/lib/workflow.js");
 const {
   classifyLintResult,
   evaluateDetectionCases,
@@ -296,6 +296,33 @@ Verify that artifact inspection can detect source drift.
   assert.match(report, /# OpenClaw Skill Archive Report/);
   assert.match(report, /Status: drift detected/);
   assert.match(report, /### Changed Files/);
+});
+
+test("reviewSkill produces a ready verdict and combined review report for a valid skill", async () => {
+  const skillDir = path.resolve(__dirname, "fixtures", "valid", "basic-skill");
+  const tempDir = await makeTempDir("openclaw-review-valid-");
+  const archivePath = path.join(tempDir, "artifact.skill");
+
+  const review = await reviewSkill(skillDir, archivePath);
+
+  assert.equal(review.readiness, "ready");
+  assert.equal(review.lint.summary.errors, 0);
+  assert.equal(review.archive.destination, archivePath);
+  assert.equal(review.archive.comparison.matches, true);
+  const report = buildReviewReport(review);
+  assert.match(report, /# OpenClaw Skill Review Report/);
+  assert.match(report, /Verdict: ready to ship/);
+});
+
+test("reviewSkill stops before packaging when blocking lint errors remain", async () => {
+  const skillDir = path.resolve(__dirname, "fixtures", "invalid", "bad-version-skill");
+
+  const review = await reviewSkill(skillDir);
+
+  assert.equal(review.readiness, "not-ready");
+  assert.equal(review.archive, undefined);
+  assert.equal(review.lint.summary.errors > 0, true);
+  assert.match(buildReviewReport(review), /Archive not created because blocking lint errors remain\./);
 });
 
 test("evaluation helpers summarize good-vs-bad detection metrics", () => {

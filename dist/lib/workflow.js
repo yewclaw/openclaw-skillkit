@@ -10,10 +10,14 @@ exports.formatBytes = formatBytes;
 exports.resolveArchiveDestination = resolveArchiveDestination;
 exports.packSkill = packSkill;
 exports.inspectSkillArchive = inspectSkillArchive;
+exports.reviewSkill = reviewSkill;
 exports.compareArchiveToSource = compareArchiveToSource;
 exports.resolveArchiveReportPath = resolveArchiveReportPath;
+exports.resolveReviewReportPath = resolveReviewReportPath;
 exports.writeArchiveReport = writeArchiveReport;
+exports.writeReviewReport = writeReviewReport;
 exports.buildArchiveReport = buildArchiveReport;
+exports.buildReviewReport = buildReviewReport;
 exports.listExampleSkills = listExampleSkills;
 const node_path_1 = __importDefault(require("node:path"));
 const node_crypto_1 = require("node:crypto");
@@ -136,6 +140,40 @@ async function inspectSkillArchive(archivePath) {
         manifest
     };
 }
+async function reviewSkill(targetDir, outputPath) {
+    const resolvedDir = node_path_1.default.resolve(targetDir);
+    const lintResult = await (0, skill_1.lintSkill)(resolvedDir);
+    const summary = summarizeLintResult(lintResult);
+    const focusAreas = summarizeFocusAreas(lintResult);
+    const nextSteps = buildActionPlan(lintResult, resolvedDir);
+    const review = {
+        skillDir: resolvedDir,
+        readiness: summary.errors > 0 ? "not-ready" : summary.warnings > 0 ? "ready-with-warnings" : "ready",
+        lint: {
+            fileCount: lintResult.fileCount,
+            summary,
+            focusAreas,
+            nextSteps,
+            issues: lintResult.issues
+        }
+    };
+    if (summary.errors > 0) {
+        return review;
+    }
+    const packed = await packSkill(resolvedDir, outputPath);
+    const inspected = await compareArchiveToSource(packed.destination, resolvedDir);
+    if (!inspected.comparison) {
+        throw new Error("Expected source comparison for review workflow.");
+    }
+    review.archive = {
+        ...packed,
+        comparison: inspected.comparison
+    };
+    if (!inspected.comparison.matches) {
+        review.readiness = "not-ready";
+    }
+    return review;
+}
 async function compareArchiveToSource(archivePath, sourceDir) {
     const inspected = await inspectSkillArchive(archivePath);
     const resolvedSourceDir = node_path_1.default.resolve(sourceDir);
@@ -219,12 +257,29 @@ function resolveArchiveReportPath(archivePath, requestedPath) {
     }
     return node_path_1.default.resolve(requestedPath);
 }
+function resolveReviewReportPath(review, requestedPath) {
+    if (!requestedPath) {
+        return undefined;
+    }
+    if (requestedPath === true) {
+        return node_path_1.default.resolve(defaultReviewReportFileName(review.skillDir, review.archive?.destination));
+    }
+    return node_path_1.default.resolve(requestedPath);
+}
 async function writeArchiveReport(archivePath, result, requestedPath) {
     const reportPath = resolveArchiveReportPath(archivePath, requestedPath);
     if (!reportPath) {
         return undefined;
     }
     await (0, fs_1.writeTextFile)(reportPath, buildArchiveReport(result));
+    return reportPath;
+}
+async function writeReviewReport(review, requestedPath) {
+    const reportPath = resolveReviewReportPath(review, requestedPath);
+    if (!reportPath) {
+        return undefined;
+    }
+    await (0, fs_1.writeTextFile)(reportPath, buildReviewReport(review));
     return reportPath;
 }
 function buildArchiveReport(result) {
@@ -281,6 +336,51 @@ function buildArchiveReport(result) {
         lines.push(`- Next: run \`openclaw-skillkit inspect ${result.archivePath} --source ./path-to-skill\` to include drift status`);
     }
     lines.push("", "## Reviewer Checklist", "- Confirm the skill name, version, and description match the release you intend to share.", "- Confirm every referenced helper file is bundled in the archive contents above.", "- If source comparison was included, resolve any reported drift before publication.");
+    return lines.join("\n");
+}
+function buildReviewReport(review) {
+    const lines = [
+        "# OpenClaw Skill Review Report",
+        "",
+        `Generated: ${new Date().toISOString()}`,
+        "",
+        "## Readiness",
+        `- Skill directory: ${review.skillDir}`,
+        `- Verdict: ${formatReviewReadiness(review.readiness)}`,
+        `- Files checked: ${review.lint.fileCount}`,
+        `- Lint summary: ${review.lint.summary.errors} error(s), ${review.lint.summary.warnings} warning(s)`
+    ];
+    if (review.lint.focusAreas.length > 0) {
+        lines.push("", "## Focus Areas");
+        for (const area of review.lint.focusAreas) {
+            lines.push(`- ${area.label}: ${area.errors} error(s), ${area.warnings} warning(s)`);
+        }
+    }
+    if (review.lint.issues.length > 0) {
+        lines.push("", "## Issues");
+        for (const issue of review.lint.issues) {
+            lines.push(`- ${issue.level.toUpperCase()} [${issue.code}] ${issue.file}: ${issue.message}`);
+            if (issue.suggestion) {
+                lines.push(`  Fix: ${issue.suggestion}`);
+            }
+        }
+    }
+    if (review.archive) {
+        lines.push("", "## Archive", `- Archive: ${review.archive.destination}`, `- Size: ${review.archive.archiveSizeLabel}`, `- Skill: ${review.archive.manifest.skill.name}@${review.archive.manifest.skill.version}`, `- Bundled files: ${review.archive.manifest.entryCount}`, `- Drift check: ${review.archive.comparison.matches ? "matches source" : "drift detected"}`, `- Matched entries: ${review.archive.comparison.matchedEntries}/${review.archive.comparison.entryCount}`);
+        if (review.archive.warnings.length > 0) {
+            lines.push("", "## Packaging Warnings");
+            for (const warning of review.archive.warnings) {
+                lines.push(`- ${warning.code}: ${warning.message}`);
+            }
+        }
+    }
+    else {
+        lines.push("", "## Archive", "- Archive not created because blocking lint errors remain.");
+    }
+    if (review.lint.nextSteps.length > 0) {
+        lines.push("", "## Next Steps");
+        review.lint.nextSteps.forEach((step, index) => lines.push(`${index + 1}. ${step}`));
+    }
     return lines.join("\n");
 }
 async function listExampleSkills(repoRoot = node_path_1.default.resolve(__dirname, "..", "..")) {
@@ -369,4 +469,24 @@ function defaultArchiveReportFileName(archivePath) {
         return `${resolvedArchivePath.slice(0, -".skill".length)}.report.md`;
     }
     return `${resolvedArchivePath}.report.md`;
+}
+function defaultReviewReportFileName(skillDir, archivePath) {
+    if (archivePath) {
+        const resolvedArchivePath = node_path_1.default.resolve(archivePath);
+        if (resolvedArchivePath.endsWith(".skill")) {
+            return `${resolvedArchivePath.slice(0, -".skill".length)}.review.md`;
+        }
+        return `${resolvedArchivePath}.review.md`;
+    }
+    return `${node_path_1.default.resolve(skillDir)}.review.md`;
+}
+function formatReviewReadiness(readiness) {
+    switch (readiness) {
+        case "ready":
+            return "ready to ship";
+        case "ready-with-warnings":
+            return "ready with warnings";
+        default:
+            return "not ready";
+    }
 }

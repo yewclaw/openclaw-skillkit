@@ -29,6 +29,21 @@ export interface PackSkillResult {
     archiveSizeLabel: string;
     manifest: SkillArchiveManifest;
 }
+export type ReviewReadiness = "ready" | "ready-with-warnings" | "not-ready";
+export interface SkillReviewResult {
+    skillDir: string;
+    readiness: ReviewReadiness;
+    lint: {
+        fileCount: number;
+        summary: LintSummary;
+        focusAreas: FocusAreaSummary[];
+        nextSteps: string[];
+        issues: LintResult["issues"];
+    };
+    archive?: PackSkillResult & {
+        comparison: ArchiveSourceComparison;
+    };
+}
 export interface ArchiveSourceComparison {
     sourceDir: string;
     comparedAt: string;
@@ -65,8 +80,12 @@ export declare function resolveArchiveDestination(resolvedDir: string, outputPat
 };
 export declare function packSkill(targetDir: string, outputPath?: string): Promise<PackSkillResult>;
 export declare function inspectSkillArchive(archivePath: string): Promise<InspectedArchiveResult>;
+export declare function reviewSkill(targetDir: string, outputPath?: string): Promise<SkillReviewResult>;
 export declare function compareArchiveToSource(archivePath: string, sourceDir: string): Promise<InspectedArchiveResult>;
 export declare function resolveArchiveReportPath(archivePath: string, requestedPath?: string | boolean): string | undefined;
+export declare function resolveReviewReportPath(review: SkillReviewResult, requestedPath?: string | boolean): string | undefined;
 export declare function writeArchiveReport(archivePath: string, result: InspectedArchiveResult, requestedPath?: string | boolean): Promise<string | undefined>;
+export declare function writeReviewReport(review: SkillReviewResult, requestedPath?: string | boolean): Promise<string | undefined>;
 export declare function buildArchiveReport(result: InspectedArchiveResult): string;
+export declare function buildReviewReport(review: SkillReviewResult): string;
 export declare function listExampleSkills(repoRoot?: string): Promise<ExampleSkillSummary[]>;

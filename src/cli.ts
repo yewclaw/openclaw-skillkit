@@ -5,6 +5,7 @@ import { runInit } from "./commands/init";
 import { runLint } from "./commands/lint";
 import { runPack } from "./commands/pack";
 import { runInspect } from "./commands/inspect";
+import { runReview } from "./commands/review";
 import { runServe } from "./commands/serve";
 import { TEMPLATE_MODES, type TemplateMode } from "./lib/templates";
 import { getExampleSkillForTemplate } from "./commands/init";
@@ -30,6 +31,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       return;
     case "inspect":
       await handleInspect(parsed);
+      return;
+    case "review":
+      await handleReview(parsed);
       return;
     case "serve":
       await handleServe(parsed);
@@ -123,6 +127,19 @@ async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void
     sourceDir: typeof getFlag(parsed, "source") === "string" ? String(getFlag(parsed, "source")) : undefined,
     reportPath: parseOptionalPathFlag(parsed, "report")
   });
+}
+
+async function handleReview(parsed: ReturnType<typeof parseArgs>): Promise<void> {
+  assertNoUnexpectedFlags(parsed, ["output", "format", "json", "report"]);
+  assertArgumentCount(parsed, 1, "review accepts at most 1 target directory.");
+
+  const targetDir = parsed.positionals[0] ?? ".";
+  const exitCode = await runReview(targetDir, {
+    outputPath: typeof getFlag(parsed, "output") === "string" ? String(getFlag(parsed, "output")) : undefined,
+    format: parseMachineFormat(parsed, "review"),
+    reportPath: parseOptionalPathFlag(parsed, "report")
+  });
+  process.exitCode = exitCode;
 }
 
 async function handleServe(parsed: ReturnType<typeof parseArgs>): Promise<void> {
@@ -231,6 +248,23 @@ Examples:
     return;
   }
 
+  if (command === "review") {
+    console.log(`openclaw-skillkit review
+
+Run a release-readiness review for a skill directory.
+
+Usage:
+  openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
+
+Examples:
+  openclaw-skillkit review
+  openclaw-skillkit review skills/customer-support
+  openclaw-skillkit review skills/customer-support --output ./artifacts/customer-support.skill --report
+  openclaw-skillkit review skills/customer-support --json
+`);
+    return;
+  }
+
   if (command === "serve") {
     console.log(`openclaw-skillkit serve
 
@@ -256,6 +290,7 @@ Usage:
   openclaw-skillkit lint [dir] [--json|--format text|json]
   openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
   openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
 
 Help:

@@ -39,6 +39,23 @@ export interface PackSkillResult {
   manifest: SkillArchiveManifest;
 }
 
+export type ReviewReadiness = "ready" | "ready-with-warnings" | "not-ready";
+
+export interface SkillReviewResult {
+  skillDir: string;
+  readiness: ReviewReadiness;
+  lint: {
+    fileCount: number;
+    summary: LintSummary;
+    focusAreas: FocusAreaSummary[];
+    nextSteps: string[];
+    issues: LintResult["issues"];
+  };
+  archive?: PackSkillResult & {
+    comparison: ArchiveSourceComparison;
+  };
+}
+
 export interface ArchiveSourceComparison {
   sourceDir: string;
   comparedAt: string;
@@ -217,6 +234,46 @@ export async function inspectSkillArchive(
   };
 }
 
+export async function reviewSkill(targetDir: string, outputPath?: string): Promise<SkillReviewResult> {
+  const resolvedDir = path.resolve(targetDir);
+  const lintResult = await lintSkill(resolvedDir);
+  const summary = summarizeLintResult(lintResult);
+  const focusAreas = summarizeFocusAreas(lintResult);
+  const nextSteps = buildActionPlan(lintResult, resolvedDir);
+  const review: SkillReviewResult = {
+    skillDir: resolvedDir,
+    readiness: summary.errors > 0 ? "not-ready" : summary.warnings > 0 ? "ready-with-warnings" : "ready",
+    lint: {
+      fileCount: lintResult.fileCount,
+      summary,
+      focusAreas,
+      nextSteps,
+      issues: lintResult.issues
+    }
+  };
+
+  if (summary.errors > 0) {
+    return review;
+  }
+
+  const packed = await packSkill(resolvedDir, outputPath);
+  const inspected = await compareArchiveToSource(packed.destination, resolvedDir);
+  if (!inspected.comparison) {
+    throw new Error("Expected source comparison for review workflow.");
+  }
+
+  review.archive = {
+    ...packed,
+    comparison: inspected.comparison
+  };
+
+  if (!inspected.comparison.matches) {
+    review.readiness = "not-ready";
+  }
+
+  return review;
+}
+
 export async function compareArchiveToSource(
   archivePath: string,
   sourceDir: string
@@ -320,6 +377,21 @@ export function resolveArchiveReportPath(archivePath: string, requestedPath?: st
   return path.resolve(requestedPath);
 }
 
+export function resolveReviewReportPath(
+  review: SkillReviewResult,
+  requestedPath?: string | boolean
+): string | undefined {
+  if (!requestedPath) {
+    return undefined;
+  }
+
+  if (requestedPath === true) {
+    return path.resolve(defaultReviewReportFileName(review.skillDir, review.archive?.destination));
+  }
+
+  return path.resolve(requestedPath);
+}
+
 export async function writeArchiveReport(
   archivePath: string,
   result: InspectedArchiveResult,
@@ -331,6 +403,19 @@ export async function writeArchiveReport(
   }
 
   await writeTextFile(reportPath, buildArchiveReport(result));
+  return reportPath;
+}
+
+export async function writeReviewReport(
+  review: SkillReviewResult,
+  requestedPath?: string | boolean
+): Promise<string | undefined> {
+  const reportPath = resolveReviewReportPath(review, requestedPath);
+  if (!reportPath) {
+    return undefined;
+  }
+
+  await writeTextFile(reportPath, buildReviewReport(review));
   return reportPath;
 }
 
@@ -410,6 +495,66 @@ export function buildArchiveReport(result: InspectedArchiveResult): string {
     "- Confirm every referenced helper file is bundled in the archive contents above.",
     "- If source comparison was included, resolve any reported drift before publication."
   );
+
+  return lines.join("\n");
+}
+
+export function buildReviewReport(review: SkillReviewResult): string {
+  const lines = [
+    "# OpenClaw Skill Review Report",
+    "",
+    `Generated: ${new Date().toISOString()}`,
+    "",
+    "## Readiness",
+    `- Skill directory: ${review.skillDir}`,
+    `- Verdict: ${formatReviewReadiness(review.readiness)}`,
+    `- Files checked: ${review.lint.fileCount}`,
+    `- Lint summary: ${review.lint.summary.errors} error(s), ${review.lint.summary.warnings} warning(s)`
+  ];
+
+  if (review.lint.focusAreas.length > 0) {
+    lines.push("", "## Focus Areas");
+    for (const area of review.lint.focusAreas) {
+      lines.push(`- ${area.label}: ${area.errors} error(s), ${area.warnings} warning(s)`);
+    }
+  }
+
+  if (review.lint.issues.length > 0) {
+    lines.push("", "## Issues");
+    for (const issue of review.lint.issues) {
+      lines.push(`- ${issue.level.toUpperCase()} [${issue.code}] ${issue.file}: ${issue.message}`);
+      if (issue.suggestion) {
+        lines.push(`  Fix: ${issue.suggestion}`);
+      }
+    }
+  }
+
+  if (review.archive) {
+    lines.push(
+      "",
+      "## Archive",
+      `- Archive: ${review.archive.destination}`,
+      `- Size: ${review.archive.archiveSizeLabel}`,
+      `- Skill: ${review.archive.manifest.skill.name}@${review.archive.manifest.skill.version}`,
+      `- Bundled files: ${review.archive.manifest.entryCount}`,
+      `- Drift check: ${review.archive.comparison.matches ? "matches source" : "drift detected"}`,
+      `- Matched entries: ${review.archive.comparison.matchedEntries}/${review.archive.comparison.entryCount}`
+    );
+
+    if (review.archive.warnings.length > 0) {
+      lines.push("", "## Packaging Warnings");
+      for (const warning of review.archive.warnings) {
+        lines.push(`- ${warning.code}: ${warning.message}`);
+      }
+    }
+  } else {
+    lines.push("", "## Archive", "- Archive not created because blocking lint errors remain.");
+  }
+
+  if (review.lint.nextSteps.length > 0) {
+    lines.push("", "## Next Steps");
+    review.lint.nextSteps.forEach((step, index) => lines.push(`${index + 1}. ${step}`));
+  }
 
   return lines.join("\n");
 }
@@ -529,4 +674,28 @@ function defaultArchiveReportFileName(archivePath: string): string {
   }
 
   return `${resolvedArchivePath}.report.md`;
+}
+
+function defaultReviewReportFileName(skillDir: string, archivePath?: string): string {
+  if (archivePath) {
+    const resolvedArchivePath = path.resolve(archivePath);
+    if (resolvedArchivePath.endsWith(".skill")) {
+      return `${resolvedArchivePath.slice(0, -".skill".length)}.review.md`;
+    }
+
+    return `${resolvedArchivePath}.review.md`;
+  }
+
+  return `${path.resolve(skillDir)}.review.md`;
+}
+
+function formatReviewReadiness(readiness: ReviewReadiness): string {
+  switch (readiness) {
+    case "ready":
+      return "ready to ship";
+    case "ready-with-warnings":
+      return "ready with warnings";
+    default:
+      return "not ready";
+  }
 }
