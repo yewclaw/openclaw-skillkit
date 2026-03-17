@@ -343,6 +343,15 @@ serialTest("cli help supports command-specific output", async () => {
   assert.match(result.stdout, /openclaw-skillkit pack$/m);
 });
 
+serialTest("cli help documents the local studio command", async () => {
+  const result = await runCli(["help", "serve"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /openclaw-skillkit serve/);
+  assert.match(result.stdout, /local OpenClaw Skill Studio web interface/);
+  assert.match(result.stdout, /--port 3210/);
+});
+
 serialTest("cli inspect reads the embedded archive manifest", async () => {
   const tempDir = await makeTempDir("openclaw-inspect-");
   const skillDir = path.join(tempDir, "skill");

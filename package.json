@@ -23,7 +23,8 @@
     "bench": "node bench/index.js",
     "verify": "node scripts/verify.js",
     "start": "node dist/cli.js",
-    "dev": "node src/cli.ts"
+    "dev": "node src/cli.ts",
+    "ui": "node dist/cli.js serve"
   },
   "keywords": [
     "openclaw",

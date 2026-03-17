@@ -5,6 +5,7 @@ import { runInit } from "./commands/init";
 import { runLint } from "./commands/lint";
 import { runPack } from "./commands/pack";
 import { runInspect } from "./commands/inspect";
+import { runServe } from "./commands/serve";
 import { TEMPLATE_MODES, type TemplateMode } from "./lib/templates";
 import { getExampleSkillForTemplate } from "./commands/init";
 
@@ -29,6 +30,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       return;
     case "inspect":
       await handleInspect(parsed);
+      return;
+    case "serve":
+      await handleServe(parsed);
       return;
     case undefined:
       printHelp("overview");
@@ -116,6 +120,28 @@ async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void
   await runInspect(archivePath, { format: parseMachineFormat(parsed, "inspect") });
 }
 
+async function handleServe(parsed: ReturnType<typeof parseArgs>): Promise<void> {
+  assertNoUnexpectedFlags(parsed, ["host", "port"]);
+  assertArgumentCount(parsed, 0, "serve does not accept positional arguments.");
+
+  const portValue = getFlag(parsed, "port");
+  const port =
+    typeof portValue === "string" && /^\d+$/.test(portValue)
+      ? Number(portValue)
+      : typeof portValue === "undefined"
+        ? 3210
+        : Number.NaN;
+
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error('serve expects --port to be an integer between 0 and 65535.');
+  }
+
+  await runServe({
+    host: typeof getFlag(parsed, "host") === "string" ? String(getFlag(parsed, "host")) : "127.0.0.1",
+    port
+  });
+}
+
 function assertNoUnexpectedFlags(parsed: ReturnType<typeof parseArgs>, allowed: string[]): void {
   const unexpected = [...parsed.flags.keys()].filter((flag) => flag !== "help" && !allowed.includes(flag));
   if (unexpected.length > 0) {
@@ -197,6 +223,22 @@ Examples:
     return;
   }
 
+  if (command === "serve") {
+    console.log(`openclaw-skillkit serve
+
+Run the local OpenClaw Skill Studio web interface.
+
+Usage:
+  openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
+
+Examples:
+  openclaw-skillkit serve
+  openclaw-skillkit serve --port 4310
+  openclaw-skillkit serve --host 0.0.0.0 --port 3210
+`);
+    return;
+  }
+
   console.log(`openclaw-skillkit
 
 Build, lint, and pack OpenClaw skills.
@@ -206,6 +248,7 @@ Usage:
   openclaw-skillkit lint [dir] [--json|--format text|json]
   openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--json|--format text|json]
   openclaw-skillkit inspect <archive.skill> [--json|--format text|json]
+  openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
 
 Help:
   openclaw-skillkit help

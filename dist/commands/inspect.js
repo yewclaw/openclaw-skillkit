@@ -1,30 +1,21 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runInspect = runInspect;
-const node_path_1 = __importDefault(require("node:path"));
-const zip_1 = require("../lib/zip");
+const workflow_1 = require("../lib/workflow");
 async function runInspect(archivePath, options) {
-    const resolvedArchivePath = node_path_1.default.resolve(archivePath);
-    const manifest = await (0, zip_1.readArchiveManifest)(resolvedArchivePath);
+    const inspected = await (0, workflow_1.inspectSkillArchive)(archivePath);
     if (options.format === "json") {
         console.log(JSON.stringify({
-            archivePath: resolvedArchivePath,
-            manifest
+            archivePath: inspected.archivePath,
+            manifest: inspected.manifest
         }, null, 2));
         return;
     }
-    console.log(`Inspecting ${resolvedArchivePath}`);
-    console.log(`  Skill: ${manifest.skill.name}@${manifest.skill.version}`);
-    console.log(`  Description: ${manifest.skill.description}`);
-    console.log(`  Entries: ${manifest.entryCount} bundled file(s), ${formatBytes(manifest.totalBytes)} before manifest.`);
-    console.log(`  Contents: ${manifest.entries.map((entry) => `${entry.path} (${formatBytes(entry.size)})`).join(", ")}`);
-}
-function formatBytes(size) {
-    if (size < 1024) {
-        return `${size} B`;
-    }
-    return `${(size / 1024).toFixed(1)} KB`;
+    console.log(`Inspecting ${inspected.archivePath}`);
+    console.log(`  Skill: ${inspected.manifest.skill.name}@${inspected.manifest.skill.version}`);
+    console.log(`  Description: ${inspected.manifest.skill.description}`);
+    console.log(`  Entries: ${inspected.manifest.entryCount} bundled file(s), ${(0, workflow_1.formatBytes)(inspected.manifest.totalBytes)} before manifest.`);
+    console.log(`  Contents: ${inspected.manifest.entries
+        .map((entry) => `${entry.path} (${(0, workflow_1.formatBytes)(entry.size)})`)
+        .join(", ")}`);
 }

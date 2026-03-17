@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/verify-npm%20run%20verify-0A7F5A" alt="Verify with npm run verify" />
 </p>
 
-<p align="center"><strong>Build, lint, package, and benchmark OpenClaw skills with a lean Node.js CLI.</strong></p>
+<p align="center"><strong>Build, lint, package, inspect, and demo OpenClaw skills with a lean Node.js toolkit.</strong></p>
 
 `openclaw-skillkit` turns skill authoring into a repeatable workflow instead of a folder of markdown that drifts over time. It gives you a scaffold, concrete validation, packaging that refuses broken skills, and a benchmark loop you can run locally or in CI.
 
@@ -22,6 +22,7 @@
 | `lint` | Catch weak metadata, placeholder copy, missing sections, and broken local references before review. |
 | `pack` | Create a `.skill` archive only after validation passes, with a manifest included for inspection. |
 | `inspect` | Read a packaged archive back out and verify exactly what skill metadata and files it contains. |
+| `serve` | Launch a local Skill Studio web UI for demos, examples, linting, packaging, and archive inspection. |
 | `benchmark` | Measure fixture detection quality and CLI round-trip performance with repeatable runs. |
 
 ## Why This Exists
@@ -47,6 +48,12 @@ npm install
 npm run verify
 ```
 
+Launch the local studio if you want a more demoable workflow:
+
+```bash
+npm run ui
+```
+
 Create a skill, edit it, validate it, and package it:
 
 ```bash
@@ -65,6 +72,24 @@ node dist/cli.js lint examples/customer-support-triage-skill
 node dist/cli.js lint examples/release-notes-skill
 node dist/cli.js pack examples/weather-research-skill
 node bench/index.js --iterations 3
+```
+
+## Local Studio
+
+`openclaw-skillkit serve` starts a lightweight local web interface on `http://127.0.0.1:3210` by default. It uses the same real workflow as the CLI, not mocked demo actions.
+
+Use it to:
+
+- scaffold a new skill with template and resource options
+- load example skills as starting points
+- lint a local skill directory and review fix guidance
+- package a `.skill` archive and inspect the bundled manifest
+
+Run it with either command:
+
+```bash
+npm run ui
+openclaw-skillkit serve --port 3210
 ```
 
 ## Workflow
@@ -229,6 +254,8 @@ openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 | `openclaw-skillkit help lint` | Show lint modes, including JSON output. |
 | `openclaw-skillkit help pack` | Show packaging behavior, output options, and JSON reporting. |
 | `openclaw-skillkit help inspect` | Show artifact inspection usage. |
+| `openclaw-skillkit help serve` | Show local studio host and port options. |
+| `openclaw-skillkit serve` | Start the local Skill Studio web interface. |
 | `npm run benchmark -- --help` | Show benchmark runner flags. |
 | `npm run check` | Type-check without emitting build output. |
 | `npm run build` | Compile the CLI into `dist/`. |
