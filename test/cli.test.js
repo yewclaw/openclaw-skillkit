@@ -216,7 +216,7 @@ serialTest("cli pack creates a .skill archive for a valid fixture", async () => 
     "scripts/example.sh"
   ]);
   const manifest = JSON.parse(await readArchiveEntry(outputPath, ".openclaw-skillkit/manifest.json"));
-  assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.schemaVersion, 2);
   assert.deepEqual(manifest.skill, {
     name: "weather-research",
     description: "Skill for structured weather research with grounded source notes.",
@@ -235,6 +235,12 @@ serialTest("cli pack creates a .skill archive for a valid fixture", async () => 
     "number",
     "number",
     "number"
+  ]);
+  assert.deepEqual(manifest.entries.map((entry) => typeof entry.sha256), [
+    "string",
+    "string",
+    "string",
+    "string"
   ]);
 });
 
@@ -384,6 +390,23 @@ serialTest("cli inspect supports json output", async () => {
   assert.equal(payload.archivePath, outputPath);
   assert.equal(payload.manifest.skill.version, "1.2.3");
   assert.equal(payload.manifest.entryCount, 4);
+});
+
+serialTest("cli inspect can compare an archive against its source directory", async () => {
+  const tempDir = await makeTempDir("openclaw-inspect-compare-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+  const packResult = await runCli(["pack", skillDir, "--output", outputPath]);
+  assert.equal(packResult.code, 0, packResult.stderr);
+
+  await fs.appendFile(path.join(skillDir, "references", "README.md"), "\nDrifted after packaging.\n");
+
+  const result = await runCli(["inspect", outputPath, "--source", skillDir]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Comparison: drift detected/);
+  assert.match(result.stdout, /Changed: references\/README\.md \(size-mismatch,/);
 });
 
 serialTest("cli rejects unknown flags with a clear error", async () => {

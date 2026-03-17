@@ -29,6 +29,27 @@ export interface PackSkillResult {
     archiveSizeLabel: string;
     manifest: SkillArchiveManifest;
 }
+export interface ArchiveSourceComparison {
+    sourceDir: string;
+    comparedAt: string;
+    metadataMatches: boolean;
+    matches: boolean;
+    entryCount: number;
+    matchedEntries: number;
+    missingFromSource: string[];
+    changedEntries: Array<{
+        path: string;
+        archiveSize: number;
+        sourceSize: number;
+        reason: "size-mismatch" | "hash-mismatch";
+    }>;
+    extraSourceEntries: string[];
+    metadataDifferences: Array<{
+        field: "name" | "description" | "version";
+        archiveValue: string;
+        sourceValue: string;
+    }>;
+}
 export declare function summarizeLintResult(result: LintResult): LintSummary;
 export declare function summarizeFocusAreas(result: LintResult): FocusAreaSummary[];
 export declare function buildActionPlan(result: LintResult, resolvedDir: string): string[];
@@ -41,5 +62,10 @@ export declare function packSkill(targetDir: string, outputPath?: string): Promi
 export declare function inspectSkillArchive(archivePath: string): Promise<{
     archivePath: string;
     manifest: SkillArchiveManifest;
+}>;
+export declare function compareArchiveToSource(archivePath: string, sourceDir: string): Promise<{
+    archivePath: string;
+    manifest: SkillArchiveManifest;
+    comparison: ArchiveSourceComparison;
 }>;
 export declare function listExampleSkills(repoRoot?: string): Promise<ExampleSkillSummary[]>;

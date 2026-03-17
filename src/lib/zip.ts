@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { writeFile } from "node:fs/promises";
@@ -34,6 +35,7 @@ export interface SkillArchiveManifest {
   entries: Array<{
     path: string;
     size: number;
+    sha256?: string;
   }>;
 }
 
@@ -117,9 +119,16 @@ async function buildArchiveManifest(
 ): Promise<SkillArchiveManifest> {
   const skillMarkdown = await readFile(path.join(sourceDir, "SKILL.md"), "utf8");
   const parsed = parseFrontmatter(skillMarkdown);
+  const entries = await Promise.all(
+    files.map(async (file) => ({
+      path: normalizeArchivePath(file.relativePath),
+      size: file.size,
+      sha256: hashBuffer(await readFile(file.absolutePath))
+    }))
+  );
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     packagedAt: new Date().toISOString(),
     sourceDir: path.basename(sourceDir),
     skill: {
@@ -129,11 +138,12 @@ async function buildArchiveManifest(
     },
     entryCount: files.length,
     totalBytes: files.reduce((total, file) => total + file.size, 0),
-    entries: files.map((file) => ({
-      path: normalizeArchivePath(file.relativePath),
-      size: file.size
-    }))
+    entries
   };
+}
+
+function hashBuffer(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex");
 }
 
 async function readArchiveEntry(archivePath: string, entryName: string): Promise<string> {

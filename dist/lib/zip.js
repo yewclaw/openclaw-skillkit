@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSkillArchive = createSkillArchive;
 exports.readArchiveManifest = readArchiveManifest;
+const node_crypto_1 = require("node:crypto");
 const promises_1 = require("node:fs/promises");
 const node_path_1 = __importDefault(require("node:path"));
 const promises_2 = require("node:fs/promises");
@@ -72,8 +73,13 @@ function normalizeArchivePath(relativePath) {
 async function buildArchiveManifest(sourceDir, files) {
     const skillMarkdown = await (0, promises_1.readFile)(node_path_1.default.join(sourceDir, "SKILL.md"), "utf8");
     const parsed = (0, frontmatter_1.parseFrontmatter)(skillMarkdown);
+    const entries = await Promise.all(files.map(async (file) => ({
+        path: normalizeArchivePath(file.relativePath),
+        size: file.size,
+        sha256: hashBuffer(await (0, promises_1.readFile)(file.absolutePath))
+    })));
     return {
-        schemaVersion: 1,
+        schemaVersion: 2,
         packagedAt: new Date().toISOString(),
         sourceDir: node_path_1.default.basename(sourceDir),
         skill: {
@@ -83,11 +89,11 @@ async function buildArchiveManifest(sourceDir, files) {
         },
         entryCount: files.length,
         totalBytes: files.reduce((total, file) => total + file.size, 0),
-        entries: files.map((file) => ({
-            path: normalizeArchivePath(file.relativePath),
-            size: file.size
-        }))
+        entries
     };
+}
+function hashBuffer(buffer) {
+    return (0, node_crypto_1.createHash)("sha256").update(buffer).digest("hex");
 }
 async function readArchiveEntry(archivePath, entryName) {
     const buffer = await (0, promises_1.readFile)(archivePath);

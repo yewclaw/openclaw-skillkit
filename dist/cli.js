@@ -100,13 +100,16 @@ async function handlePack(parsed) {
     });
 }
 async function handleInspect(parsed) {
-    assertNoUnexpectedFlags(parsed, ["format", "json"]);
+    assertNoUnexpectedFlags(parsed, ["format", "json", "source"]);
     assertArgumentCount(parsed, 1, "inspect expects exactly 1 archive path.");
     const archivePath = parsed.positionals[0];
     if (!archivePath) {
         throw new Error('inspect requires a .skill archive path. Run "openclaw-skillkit help inspect" for examples.');
     }
-    await (0, inspect_1.runInspect)(archivePath, { format: parseMachineFormat(parsed, "inspect") });
+    await (0, inspect_1.runInspect)(archivePath, {
+        format: parseMachineFormat(parsed, "inspect"),
+        sourceDir: typeof (0, args_1.getFlag)(parsed, "source") === "string" ? String((0, args_1.getFlag)(parsed, "source")) : undefined
+    });
 }
 async function handleServe(parsed) {
     assertNoUnexpectedFlags(parsed, ["host", "port"]);
@@ -190,10 +193,11 @@ Examples:
 Inspect a packaged .skill archive and print the embedded manifest.
 
 Usage:
-  openclaw-skillkit inspect <archive.skill> [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit inspect ./artifacts/customer-support.skill
+  openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
   openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 `);
         return;
@@ -221,7 +225,7 @@ Usage:
   openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
   openclaw-skillkit lint [dir] [--json|--format text|json]
   openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--json|--format text|json]
-  openclaw-skillkit inspect <archive.skill> [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--json|--format text|json]
   openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
 
 Help:

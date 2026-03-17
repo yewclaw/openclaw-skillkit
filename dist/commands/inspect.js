@@ -3,11 +3,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.runInspect = runInspect;
 const workflow_1 = require("../lib/workflow");
 async function runInspect(archivePath, options) {
-    const inspected = await (0, workflow_1.inspectSkillArchive)(archivePath);
+    const inspected = options.sourceDir
+        ? await (0, workflow_1.compareArchiveToSource)(archivePath, options.sourceDir)
+        : await (0, workflow_1.inspectSkillArchive)(archivePath);
     if (options.format === "json") {
         console.log(JSON.stringify({
             archivePath: inspected.archivePath,
-            manifest: inspected.manifest
+            manifest: inspected.manifest,
+            comparison: "comparison" in inspected ? inspected.comparison : undefined
         }, null, 2));
         return;
     }
@@ -18,4 +21,28 @@ async function runInspect(archivePath, options) {
     console.log(`  Contents: ${inspected.manifest.entries
         .map((entry) => `${entry.path} (${(0, workflow_1.formatBytes)(entry.size)})`)
         .join(", ")}`);
+    if (hasComparison(inspected)) {
+        const { comparison } = inspected;
+        console.log(`  Source: ${comparison.sourceDir}`);
+        console.log(`  Comparison: ${comparison.matches ? "matches source" : "drift detected"} (${comparison.matchedEntries}/${comparison.entryCount} archive entries unchanged).`);
+        if (comparison.metadataDifferences.length > 0) {
+            console.log(`  Metadata drift: ${comparison.metadataDifferences
+                .map((difference) => `${difference.field} archive="${difference.archiveValue}" source="${difference.sourceValue}"`)
+                .join("; ")}`);
+        }
+        if (comparison.changedEntries.length > 0) {
+            console.log(`  Changed: ${comparison.changedEntries
+                .map((entry) => `${entry.path} (${entry.reason}, archive ${(0, workflow_1.formatBytes)(entry.archiveSize)}, source ${(0, workflow_1.formatBytes)(entry.sourceSize)})`)
+                .join(", ")}`);
+        }
+        if (comparison.missingFromSource.length > 0) {
+            console.log(`  Missing from source: ${comparison.missingFromSource.join(", ")}`);
+        }
+        if (comparison.extraSourceEntries.length > 0) {
+            console.log(`  New in source: ${comparison.extraSourceEntries.join(", ")}`);
+        }
+    }
+}
+function hasComparison(value) {
+    return Boolean(value.comparison);
 }

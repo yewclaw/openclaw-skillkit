@@ -10,8 +10,10 @@ exports.formatBytes = formatBytes;
 exports.resolveArchiveDestination = resolveArchiveDestination;
 exports.packSkill = packSkill;
 exports.inspectSkillArchive = inspectSkillArchive;
+exports.compareArchiveToSource = compareArchiveToSource;
 exports.listExampleSkills = listExampleSkills;
 const node_path_1 = __importDefault(require("node:path"));
+const node_crypto_1 = require("node:crypto");
 const promises_1 = require("node:fs/promises");
 const fs_1 = require("./fs");
 const frontmatter_1 = require("./frontmatter");
@@ -131,6 +133,80 @@ async function inspectSkillArchive(archivePath) {
         manifest
     };
 }
+async function compareArchiveToSource(archivePath, sourceDir) {
+    const inspected = await inspectSkillArchive(archivePath);
+    const resolvedSourceDir = node_path_1.default.resolve(sourceDir);
+    const sourceSkillFile = node_path_1.default.join(resolvedSourceDir, "SKILL.md");
+    if (!(await (0, fs_1.exists)(sourceSkillFile))) {
+        throw new Error(`Missing SKILL.md at source directory: ${resolvedSourceDir}`);
+    }
+    const sourceMarkdown = await (0, fs_1.readTextFile)(sourceSkillFile);
+    const sourceFrontmatter = (0, frontmatter_1.parseFrontmatter)(sourceMarkdown).attributes;
+    const sourceFiles = (await readdirRecursiveWithHashes(resolvedSourceDir))
+        .filter((file) => !file.relativePath.endsWith(".skill"))
+        .sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+    const sourceByPath = new Map(sourceFiles.map((file) => [
+        file.relativePath.split(node_path_1.default.sep).join("/"),
+        {
+            size: file.size,
+            sha256: file.sha256
+        }
+    ]));
+    const metadataDifferences = [
+        compareMetadataField("name", inspected.manifest.skill.name, sourceFrontmatter.name),
+        compareMetadataField("description", inspected.manifest.skill.description, sourceFrontmatter.description),
+        compareMetadataField("version", inspected.manifest.skill.version, sourceFrontmatter.version)
+    ].filter(Boolean);
+    const missingFromSource = [];
+    const changedEntries = [];
+    let matchedEntries = 0;
+    for (const entry of inspected.manifest.entries) {
+        const sourceEntry = sourceByPath.get(entry.path);
+        if (!sourceEntry) {
+            missingFromSource.push(entry.path);
+            continue;
+        }
+        sourceByPath.delete(entry.path);
+        if (sourceEntry.size !== entry.size) {
+            changedEntries.push({
+                path: entry.path,
+                archiveSize: entry.size,
+                sourceSize: sourceEntry.size,
+                reason: "size-mismatch"
+            });
+            continue;
+        }
+        if (entry.sha256 && sourceEntry.sha256 !== entry.sha256) {
+            changedEntries.push({
+                path: entry.path,
+                archiveSize: entry.size,
+                sourceSize: sourceEntry.size,
+                reason: "hash-mismatch"
+            });
+            continue;
+        }
+        matchedEntries += 1;
+    }
+    const extraSourceEntries = [...sourceByPath.keys()].sort((left, right) => left.localeCompare(right));
+    const metadataMatches = metadataDifferences.length === 0;
+    const matches = metadataMatches && missingFromSource.length === 0 && changedEntries.length === 0 && extraSourceEntries.length === 0;
+    return {
+        archivePath: inspected.archivePath,
+        manifest: inspected.manifest,
+        comparison: {
+            sourceDir: resolvedSourceDir,
+            comparedAt: new Date().toISOString(),
+            metadataMatches,
+            matches,
+            entryCount: inspected.manifest.entryCount,
+            matchedEntries,
+            missingFromSource,
+            changedEntries,
+            extraSourceEntries,
+            metadataDifferences
+        }
+    };
+}
 async function listExampleSkills(repoRoot = node_path_1.default.resolve(__dirname, "..", "..")) {
     const examplesDir = node_path_1.default.join(repoRoot, "examples");
     const entries = await (0, promises_1.readdir)(examplesDir, { withFileTypes: true });
@@ -189,3 +265,25 @@ const CATEGORY_GUIDANCE = {
         suggestion: "Mark bundled helper scripts executable when authors are expected to run them directly."
     }
 };
+async function readdirRecursiveWithHashes(rootDir) {
+    const files = await (0, fs_1.listFilesRecursive)(rootDir);
+    return Promise.all(files.map(async (file) => ({
+        relativePath: file.relativePath,
+        size: file.size,
+        sha256: hashBuffer(await (0, promises_1.readFile)(file.absolutePath))
+    })));
+}
+function hashBuffer(buffer) {
+    return (0, node_crypto_1.createHash)("sha256").update(buffer).digest("hex");
+}
+function compareMetadataField(field, archiveValue, sourceValue) {
+    const normalizedSourceValue = typeof sourceValue === "string" ? sourceValue : "";
+    if (archiveValue === normalizedSourceValue) {
+        return null;
+    }
+    return {
+        field,
+        archiveValue,
+        sourceValue: normalizedSourceValue
+    };
+}

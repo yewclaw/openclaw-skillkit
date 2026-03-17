@@ -17,6 +17,7 @@ export interface SkillArchiveManifest {
     entries: Array<{
         path: string;
         size: number;
+        sha256?: string;
     }>;
 }
 export declare function createSkillArchive(sourceDir: string, destinationFile: string): Promise<SkillArchiveSummary>;

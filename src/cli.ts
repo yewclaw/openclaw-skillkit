@@ -109,7 +109,7 @@ async function handlePack(parsed: ReturnType<typeof parseArgs>): Promise<void> {
 }
 
 async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["format", "json"]);
+  assertNoUnexpectedFlags(parsed, ["format", "json", "source"]);
   assertArgumentCount(parsed, 1, "inspect expects exactly 1 archive path.");
 
   const archivePath = parsed.positionals[0];
@@ -117,7 +117,10 @@ async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void
     throw new Error('inspect requires a .skill archive path. Run "openclaw-skillkit help inspect" for examples.');
   }
 
-  await runInspect(archivePath, { format: parseMachineFormat(parsed, "inspect") });
+  await runInspect(archivePath, {
+    format: parseMachineFormat(parsed, "inspect"),
+    sourceDir: typeof getFlag(parsed, "source") === "string" ? String(getFlag(parsed, "source")) : undefined
+  });
 }
 
 async function handleServe(parsed: ReturnType<typeof parseArgs>): Promise<void> {
@@ -214,10 +217,11 @@ Examples:
 Inspect a packaged .skill archive and print the embedded manifest.
 
 Usage:
-  openclaw-skillkit inspect <archive.skill> [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit inspect ./artifacts/customer-support.skill
+  openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
   openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 `);
     return;
@@ -247,7 +251,7 @@ Usage:
   openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
   openclaw-skillkit lint [dir] [--json|--format text|json]
   openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--json|--format text|json]
-  openclaw-skillkit inspect <archive.skill> [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--json|--format text|json]
   openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
 
 Help:

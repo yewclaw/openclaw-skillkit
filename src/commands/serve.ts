@@ -6,6 +6,7 @@ import { lintSkill } from "../lib/skill";
 import { TEMPLATE_MODES, type TemplateMode } from "../lib/templates";
 import {
   buildActionPlan,
+  compareArchiveToSource,
   inspectSkillArchive,
   listExampleSkills,
   packSkill,
@@ -177,7 +178,10 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
     if (method === "POST" && url.pathname === "/api/inspect") {
       const body = await readJsonBody(request);
       const archivePath = requireString(body.archivePath, "archivePath");
-      const inspected = await inspectSkillArchive(archivePath);
+      const inspected =
+        typeof body.sourceDir === "string" && body.sourceDir.trim()
+          ? await compareArchiveToSource(archivePath, body.sourceDir)
+          : await inspectSkillArchive(archivePath);
 
       sendJson(response, 200, inspected);
       return;
@@ -433,9 +437,14 @@ When packaging succeeds, the inspect form will be prefilled automatically.</pre>
             </label>
             <button type="submit">Inspect archive</button>
           </form>
+          <label>
+            <span>Compare with source skill directory</span>
+            <input id="inspect-source-input" placeholder="./examples/weather-research-skill" />
+            <small>Optional. Detect drift between the packaged artifact and the current skill directory.</small>
+          </label>
           <pre id="inspect-result" class="result-card muted">Manifest details will appear here.
 
-Use this after packaging to verify the final archive contents and metadata.</pre>
+Use this after packaging to verify the final archive contents, metadata, and source-to-artifact drift.</pre>
         </section>
       </main>
     </div>
@@ -846,6 +855,7 @@ const inspectForm = document.querySelector("#inspect-form");
 const skillDirInput = document.querySelector("#skill-dir-input");
 const outputPathInput = document.querySelector("#output-path-input");
 const archivePathInput = document.querySelector("#archive-path-input");
+const inspectSourceInput = document.querySelector("#inspect-source-input");
 const initResult = document.querySelector("#init-result");
 const lintResult = document.querySelector("#lint-result");
 const packResult = document.querySelector("#pack-result");
@@ -885,7 +895,7 @@ function renderExamples() {
       '<div class="pill-row" style="margin: 12px 0 14px;">' + pills + '</div>' +
       '<div class="button-row">' +
       '<button type="button" data-use-path="' + escapeHtml(example.absolutePath) + '">Use skill</button>' +
-      '<button type="button" class="secondary" data-use-archive="' + escapeHtml(example.absolutePath + ".skill") + '">Use archive path</button>' +
+      '<button type="button" class="secondary" data-use-archive="' + escapeHtml(example.absolutePath + ".skill") + '" data-source-path="' + escapeHtml(example.absolutePath) + '">Use archive path</button>' +
       "</div>" +
       "</article>";
   }).join("");
@@ -895,6 +905,7 @@ function renderExamples() {
       const value = button.getAttribute("data-use-path");
       skillDirInput.value = value;
       outputPathInput.value = value + ".skill";
+      inspectSourceInput.value = value;
       setStatus("Example loaded", "The skill directory is prefilled. Run lint when you are ready to validate it.", "ok");
     });
   }
@@ -903,6 +914,7 @@ function renderExamples() {
     button.addEventListener("click", () => {
       const value = button.getAttribute("data-use-archive");
       archivePathInput.value = value;
+      inspectSourceInput.value = button.getAttribute("data-source-path") || inspectSourceInput.value;
       setStatus("Archive path loaded", "The inspect form is prefilled with an example archive path.", "ok");
     });
   }
@@ -926,6 +938,7 @@ initForm.addEventListener("submit", async (event) => {
     const result = await api("/api/init", payload);
     skillDirInput.value = result.targetDir;
     outputPathInput.value = result.targetDir + ".skill";
+    inspectSourceInput.value = result.targetDir;
     renderResult(initResult, [
       "Skill scaffold created",
       "",
@@ -982,8 +995,9 @@ packButton.addEventListener("click", async () => {
       outputPath: outputPathInput.value || undefined
     });
     archivePathInput.value = result.archivePath;
+    inspectSourceInput.value = skillDirInput.value;
     renderResult(packResult, formatPackResult(result));
-    setStatus("Archive packaged", "The inspect form now points at the new archive so you can review the shipped manifest.", "ok");
+    setStatus("Archive packaged", "The inspect form now points at the new archive and source directory so you can review drift immediately.", "ok");
   } catch (error) {
     renderResult(packResult, error.message, true);
     setStatus("Packaging failed", error.message, "error");
@@ -999,10 +1013,19 @@ inspectForm.addEventListener("submit", async (event) => {
 
   try {
     const result = await api("/api/inspect", {
-      archivePath: archivePathInput.value
+      archivePath: archivePathInput.value,
+      sourceDir: inspectSourceInput.value || undefined
     });
     renderResult(inspectResult, formatInspectResult(result));
-    setStatus("Archive inspected", "You are looking at the packaged manifest rather than the source directory.", "ok");
+    setStatus(
+      result.comparison && !result.comparison.matches ? "Artifact drift detected" : "Archive inspected",
+      result.comparison
+        ? result.comparison.matches
+          ? "The packaged artifact matches the selected source skill."
+          : "The packaged artifact differs from the selected source skill."
+        : "You are looking at the packaged manifest rather than the source directory.",
+      result.comparison && !result.comparison.matches ? "error" : "ok"
+    );
   } catch (error) {
     renderResult(inspectResult, error.message, true);
     setStatus("Inspect failed", error.message, "error");
@@ -1070,6 +1093,7 @@ function formatPackResult(result) {
     "",
     "Archive ready: " + result.archivePath,
     "Size: " + result.archiveSizeLabel,
+    "Manifest schema: v" + result.manifest.schemaVersion,
     "Skill: " + result.manifest.skill.name + "@" + result.manifest.skill.version,
     "Entries: " + result.manifest.entryCount
   ];
@@ -1083,10 +1107,10 @@ function formatPackResult(result) {
 
   lines.push("", "Contents:");
   for (const entry of result.manifest.entries) {
-    lines.push("- " + entry.path + " (" + entry.size + " B)");
+    lines.push("- " + entry.path + " (" + entry.size + " B, sha256 " + (entry.sha256 ? entry.sha256.slice(0, 12) : "n/a") + "...)");
   }
 
-  lines.push("", "Recommended command:", "openclaw-skillkit inspect " + result.archivePath);
+  lines.push("", "Recommended command:", "openclaw-skillkit inspect " + result.archivePath + " --source ./path-to-skill");
 
   return lines.join("\n");
 }
@@ -1097,6 +1121,7 @@ function formatInspectResult(result) {
     "Archive inspection",
     "",
     "Archive: " + result.archivePath,
+    "Manifest schema: v" + manifest.schemaVersion,
     "Skill: " + manifest.skill.name + "@" + manifest.skill.version,
     "Description: " + manifest.skill.description,
     "Packaged at: " + manifest.packagedAt,
@@ -1105,7 +1130,45 @@ function formatInspectResult(result) {
   ];
 
   for (const entry of manifest.entries) {
-    lines.push("- " + entry.path + " (" + entry.size + " B)");
+    lines.push("- " + entry.path + " (" + entry.size + " B, sha256 " + (entry.sha256 ? entry.sha256.slice(0, 12) : "n/a") + "...)");
+  }
+
+  if (result.comparison) {
+    lines.push(
+      "",
+      "Source comparison",
+      "Source: " + result.comparison.sourceDir,
+      "Status: " + (result.comparison.matches ? "matches source" : "drift detected"),
+      "Matched entries: " + result.comparison.matchedEntries + "/" + result.comparison.entryCount
+    );
+
+    if (result.comparison.metadataDifferences.length) {
+      lines.push("", "Metadata drift:");
+      for (const difference of result.comparison.metadataDifferences) {
+        lines.push("- " + difference.field + ': archive="' + difference.archiveValue + '" source="' + difference.sourceValue + '"');
+      }
+    }
+
+    if (result.comparison.changedEntries.length) {
+      lines.push("", "Changed files:");
+      for (const entry of result.comparison.changedEntries) {
+        lines.push("- " + entry.path + " (" + entry.reason + ")");
+      }
+    }
+
+    if (result.comparison.missingFromSource.length) {
+      lines.push("", "Missing from source:");
+      for (const entry of result.comparison.missingFromSource) {
+        lines.push("- " + entry);
+      }
+    }
+
+    if (result.comparison.extraSourceEntries.length) {
+      lines.push("", "New in source:");
+      for (const entry of result.comparison.extraSourceEntries) {
+        lines.push("- " + entry);
+      }
+    }
   }
 
   return lines.join("\n");

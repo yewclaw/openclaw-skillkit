@@ -8,6 +8,7 @@ const path = require("node:path");
 const { makeTempDir } = require("./helpers/fixture.js");
 const { parseFrontmatter } = require("../dist/lib/frontmatter.js");
 const { lintSkill } = require("../dist/lib/skill.js");
+const { compareArchiveToSource, packSkill } = require("../dist/lib/workflow.js");
 const {
   classifyLintResult,
   evaluateDetectionCases,
@@ -255,6 +256,42 @@ Catch broken script packaging before release.
     result.issues.map((issue) => issue.message).join("\n"),
     /Script is not executable: scripts\/example\.sh/
   );
+});
+
+test("compareArchiveToSource detects drift and manifest hashes after packaging", async () => {
+  const skillDir = await makeTempDir("openclaw-compare-");
+  const archivePath = path.join(skillDir, "artifact.skill");
+  await fs.mkdir(path.join(skillDir, "references"), { recursive: true });
+  await fs.writeFile(path.join(skillDir, "references", "README.md"), "# Guide\n");
+  await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
+name: compare-check
+description: Skill for validating archive and source comparison.
+version: 1.0.0
+---
+
+# Compare Check
+
+## Purpose
+Verify that artifact inspection can detect source drift.
+
+## Workflow
+1. Read [the guide](references/README.md).
+2. Package the skill.
+
+## Constraints
+- Keep the packaged artifact trustworthy.
+`);
+
+  const packed = await packSkill(skillDir, archivePath);
+  assert.equal(packed.manifest.schemaVersion, 2);
+  assert.equal(typeof packed.manifest.entries[0].sha256, "string");
+
+  await fs.writeFile(path.join(skillDir, "references", "README.md"), "# Guide\nUpdated after packaging.\n");
+
+  const inspected = await compareArchiveToSource(archivePath, skillDir);
+  assert.equal(inspected.comparison.matches, false);
+  assert.equal(inspected.comparison.changedEntries[0].path, "references/README.md");
+  assert.equal(inspected.comparison.changedEntries[0].reason, "size-mismatch");
 });
 
 test("evaluation helpers summarize good-vs-bad detection metrics", () => {

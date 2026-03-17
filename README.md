@@ -227,7 +227,7 @@ Example JSON output:
 
 ### 3. Package only when a skill is ready to ship
 
-`pack` runs lint first and refuses to create a `.skill` archive if blocking errors exist. It also skips nested `.skill` files and writes `.openclaw-skillkit/manifest.json` into the archive so adopters can inspect exactly what was bundled.
+`pack` runs lint first and refuses to create a `.skill` archive if blocking errors exist. It also skips nested `.skill` files and writes `.openclaw-skillkit/manifest.json` into the archive so adopters can inspect exactly what was bundled, including per-file sizes and hashes.
 
 ```bash
 openclaw-skillkit pack skills/customer-support
@@ -258,8 +258,16 @@ Use `inspect` to verify the packaged manifest instead of trusting a zip file bli
 
 ```bash
 openclaw-skillkit inspect ./artifacts/customer-support.skill
+openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
 openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 ```
+
+Adding `--source` compares the archive to a current skill directory so you can catch drift before review or publication. That comparison reports:
+
+- frontmatter metadata drift
+- files that changed since packaging
+- files missing from the current source
+- new source files not present in the archive
 
 ## Commands
 
@@ -290,8 +298,8 @@ openclaw-skillkit inspect ./artifacts/customer-support.skill --json
 The repo keeps the trust boundary explicit:
 
 - `pack` is gated by lint, so broken skills do not get archived by accident
-- packaged archives include skill metadata plus per-file sizes, and avoid recursively bundling old `.skill` artifacts
-- `inspect` lets authors and reviewers confirm the manifest from the built artifact itself
+- packaged archives include skill metadata plus per-file sizes and hashes, and avoid recursively bundling old `.skill` artifacts
+- `inspect` lets authors and reviewers confirm the manifest from the built artifact itself and compare it against the current source directory for drift
 - fixture-driven tests cover parsing, linting, CLI behavior, and archive contents
 - `npm run verify` runs tests and benchmarks, and also typechecks plus rebuilds `dist/` when the local TypeScript compiler is available
 - GitHub Actions runs the same `npm run verify` command on pushes and pull requests

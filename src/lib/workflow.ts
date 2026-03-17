@@ -1,6 +1,7 @@
 import path from "node:path";
-import { readdir, stat } from "node:fs/promises";
-import { ensureDir, exists, readTextFile } from "./fs";
+import { createHash } from "node:crypto";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { ensureDir, exists, listFilesRecursive, readTextFile } from "./fs";
 import { parseFrontmatter } from "./frontmatter";
 import { type LintResult, lintSkill } from "./skill";
 import { createSkillArchive, readArchiveManifest, type SkillArchiveManifest } from "./zip";
@@ -36,6 +37,28 @@ export interface PackSkillResult {
   archiveSizeBytes: number;
   archiveSizeLabel: string;
   manifest: SkillArchiveManifest;
+}
+
+export interface ArchiveSourceComparison {
+  sourceDir: string;
+  comparedAt: string;
+  metadataMatches: boolean;
+  matches: boolean;
+  entryCount: number;
+  matchedEntries: number;
+  missingFromSource: string[];
+  changedEntries: Array<{
+    path: string;
+    archiveSize: number;
+    sourceSize: number;
+    reason: "size-mismatch" | "hash-mismatch";
+  }>;
+  extraSourceEntries: string[];
+  metadataDifferences: Array<{
+    field: "name" | "description" | "version";
+    archiveValue: string;
+    sourceValue: string;
+  }>;
 }
 
 export function summarizeLintResult(result: LintResult): LintSummary {
@@ -188,6 +211,97 @@ export async function inspectSkillArchive(
   };
 }
 
+export async function compareArchiveToSource(
+  archivePath: string,
+  sourceDir: string
+): Promise<{ archivePath: string; manifest: SkillArchiveManifest; comparison: ArchiveSourceComparison }> {
+  const inspected = await inspectSkillArchive(archivePath);
+  const resolvedSourceDir = path.resolve(sourceDir);
+  const sourceSkillFile = path.join(resolvedSourceDir, "SKILL.md");
+
+  if (!(await exists(sourceSkillFile))) {
+    throw new Error(`Missing SKILL.md at source directory: ${resolvedSourceDir}`);
+  }
+
+  const sourceMarkdown = await readTextFile(sourceSkillFile);
+  const sourceFrontmatter = parseFrontmatter(sourceMarkdown).attributes;
+  const sourceFiles = (await readdirRecursiveWithHashes(resolvedSourceDir))
+    .filter((file) => !file.relativePath.endsWith(".skill"))
+    .sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+
+  const sourceByPath = new Map(
+    sourceFiles.map((file) => [
+      file.relativePath.split(path.sep).join("/"),
+      {
+        size: file.size,
+        sha256: file.sha256
+      }
+    ])
+  );
+  const metadataDifferences = [
+    compareMetadataField("name", inspected.manifest.skill.name, sourceFrontmatter.name),
+    compareMetadataField("description", inspected.manifest.skill.description, sourceFrontmatter.description),
+    compareMetadataField("version", inspected.manifest.skill.version, sourceFrontmatter.version)
+  ].filter(Boolean) as ArchiveSourceComparison["metadataDifferences"];
+  const missingFromSource: string[] = [];
+  const changedEntries: ArchiveSourceComparison["changedEntries"] = [];
+  let matchedEntries = 0;
+
+  for (const entry of inspected.manifest.entries) {
+    const sourceEntry = sourceByPath.get(entry.path);
+    if (!sourceEntry) {
+      missingFromSource.push(entry.path);
+      continue;
+    }
+
+    sourceByPath.delete(entry.path);
+
+    if (sourceEntry.size !== entry.size) {
+      changedEntries.push({
+        path: entry.path,
+        archiveSize: entry.size,
+        sourceSize: sourceEntry.size,
+        reason: "size-mismatch"
+      });
+      continue;
+    }
+
+    if (entry.sha256 && sourceEntry.sha256 !== entry.sha256) {
+      changedEntries.push({
+        path: entry.path,
+        archiveSize: entry.size,
+        sourceSize: sourceEntry.size,
+        reason: "hash-mismatch"
+      });
+      continue;
+    }
+
+    matchedEntries += 1;
+  }
+
+  const extraSourceEntries = [...sourceByPath.keys()].sort((left, right) => left.localeCompare(right));
+  const metadataMatches = metadataDifferences.length === 0;
+  const matches =
+    metadataMatches && missingFromSource.length === 0 && changedEntries.length === 0 && extraSourceEntries.length === 0;
+
+  return {
+    archivePath: inspected.archivePath,
+    manifest: inspected.manifest,
+    comparison: {
+      sourceDir: resolvedSourceDir,
+      comparedAt: new Date().toISOString(),
+      metadataMatches,
+      matches,
+      entryCount: inspected.manifest.entryCount,
+      matchedEntries,
+      missingFromSource,
+      changedEntries,
+      extraSourceEntries,
+      metadataDifferences
+    }
+  };
+}
+
 export async function listExampleSkills(repoRoot = path.resolve(__dirname, "..", "..")): Promise<ExampleSkillSummary[]> {
   const examplesDir = path.join(repoRoot, "examples");
   const entries = await readdir(examplesDir, { withFileTypes: true });
@@ -260,3 +374,38 @@ const CATEGORY_GUIDANCE: Record<
     suggestion: "Mark bundled helper scripts executable when authors are expected to run them directly."
   }
 };
+
+async function readdirRecursiveWithHashes(
+  rootDir: string
+): Promise<Array<{ relativePath: string; size: number; sha256: string }>> {
+  const files = await listFilesRecursive(rootDir);
+
+  return Promise.all(
+    files.map(async (file) => ({
+      relativePath: file.relativePath,
+      size: file.size,
+      sha256: hashBuffer(await readFile(file.absolutePath))
+    }))
+  );
+}
+
+function hashBuffer(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
+function compareMetadataField(
+  field: "name" | "description" | "version",
+  archiveValue: string,
+  sourceValue: unknown
+): ArchiveSourceComparison["metadataDifferences"][number] | null {
+  const normalizedSourceValue = typeof sourceValue === "string" ? sourceValue : "";
+  if (archiveValue === normalizedSourceValue) {
+    return null;
+  }
+
+  return {
+    field,
+    archiveValue,
+    sourceValue: normalizedSourceValue
+  };
+}
