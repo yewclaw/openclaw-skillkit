@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.runReview = runReview;
 const workflow_1 = require("../lib/workflow");
 async function runReview(targetDir, options) {
-    const review = await (0, workflow_1.reviewSkill)(targetDir, options.outputPath);
+    const review = await (0, workflow_1.reviewSkill)(targetDir, options.outputPath, options.baselineArchivePath);
     const reportPath = await (0, workflow_1.writeReviewReport)(review, options.reportPath);
     const summary = (0, workflow_1.summarizeReviewReadiness)(review);
     if (options.format === "json") {
@@ -34,6 +34,10 @@ async function runReview(targetDir, options) {
     if (review.archive) {
         console.log(`  Archive: ${review.archive.destination}`);
         console.log(`  Artifact check: ${review.archive.comparison.matches ? "matches source" : "drift detected"} (${review.archive.comparison.matchedEntries}/${review.archive.comparison.entryCount} archive entries unchanged).`);
+        if (review.archive.releaseComparison) {
+            console.log(`  Baseline archive: ${review.archive.releaseComparison.baselineArchivePath}`);
+            console.log(`  Release delta: ${review.archive.releaseComparison.matches ? "matches baseline archive" : "release changed"} (${review.archive.releaseComparison.matchedEntries}/${review.archive.releaseComparison.baselineEntryCount} baseline entries unchanged).`);
+        }
     }
     else {
         console.log("  Archive: not created because blocking lint errors remain.");

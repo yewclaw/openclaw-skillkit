@@ -16,17 +16,24 @@ export interface RunInspectOptions {
   sourceDir?: string;
   baselineArchivePath?: string;
   reportPath?: string | boolean;
+  entryPath?: string;
 }
 
 export async function runInspect(archivePath: string, options: RunInspectOptions): Promise<void> {
-  let inspected = await inspectSkillArchive(archivePath);
+  let inspected = await inspectSkillArchive(archivePath, {
+    entryPath: options.entryPath
+  });
 
   if (options.sourceDir) {
-    inspected = await compareArchiveToSource(archivePath, options.sourceDir);
+    inspected = await compareArchiveToSource(archivePath, options.sourceDir, {
+      entryPath: options.entryPath
+    });
   }
 
   if (options.baselineArchivePath) {
-    const compared = await compareArchives(archivePath, options.baselineArchivePath);
+    const compared = await compareArchives(archivePath, options.baselineArchivePath, {
+      entryPath: options.entryPath
+    });
     inspected = {
       ...inspected,
       releaseComparison: compared.releaseComparison
@@ -45,6 +52,8 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
           trustSummary: trust,
           releaseDeltaSummary: releaseDelta,
           manifest: inspected.manifest,
+          archiveInsights: inspected.archiveInsights,
+          entryPreview: inspected.entryPreview,
           reportPath,
           reportMarkdown: buildArchiveReport(inspected),
           comparison: "comparison" in inspected ? inspected.comparison : undefined,
@@ -76,6 +85,18 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
       .map((entry) => `${entry.path} (${formatBytes(entry.size)})`)
       .join(", ")}`
   );
+  if (inspected.archiveInsights) {
+    console.log(
+      `  Layout: ${inspected.archiveInsights.groups
+        .map((group) => `${group.label} ${group.fileCount} file(s), ${formatBytes(group.totalBytes)}`)
+        .join("; ")}`
+    );
+    console.log(
+      `  Largest: ${inspected.archiveInsights.largestEntries
+        .map((entry) => `${entry.path} (${formatBytes(entry.size)})`)
+        .join(", ")}`
+    );
+  }
 
   if (hasComparison(inspected)) {
     const { comparison } = inspected;
@@ -156,6 +177,13 @@ export async function runInspect(archivePath: string, options: RunInspectOptions
     console.log(
       `  Release history: run openclaw-skillkit inspect ${inspected.archivePath} --against ./previous-release.skill to compare against a prior artifact.`
     );
+  }
+
+  if (inspected.entryPreview) {
+    console.log(`  Entry preview: ${inspected.entryPreview.path} (${inspected.entryPreview.text ? "text" : "binary"})`);
+    console.log(inspected.entryPreview.preview);
+  } else {
+    console.log(`  Entry preview: run openclaw-skillkit inspect ${inspected.archivePath} --entry SKILL.md to inspect a bundled file.`);
   }
 
   if (reportPath) {

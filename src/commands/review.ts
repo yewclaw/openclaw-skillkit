@@ -10,10 +10,11 @@ export interface RunReviewOptions {
   outputPath?: string;
   format: "text" | "json";
   reportPath?: string | boolean;
+  baselineArchivePath?: string;
 }
 
 export async function runReview(targetDir: string, options: RunReviewOptions): Promise<number> {
-  const review = await reviewSkill(targetDir, options.outputPath);
+  const review = await reviewSkill(targetDir, options.outputPath, options.baselineArchivePath);
   const reportPath = await writeReviewReport(review, options.reportPath);
   const summary = summarizeReviewReadiness(review);
 
@@ -62,6 +63,12 @@ export async function runReview(targetDir: string, options: RunReviewOptions): P
     console.log(
       `  Artifact check: ${review.archive.comparison.matches ? "matches source" : "drift detected"} (${review.archive.comparison.matchedEntries}/${review.archive.comparison.entryCount} archive entries unchanged).`
     );
+    if (review.archive.releaseComparison) {
+      console.log(`  Baseline archive: ${review.archive.releaseComparison.baselineArchivePath}`);
+      console.log(
+        `  Release delta: ${review.archive.releaseComparison.matches ? "matches baseline archive" : "release changed"} (${review.archive.releaseComparison.matchedEntries}/${review.archive.releaseComparison.baselineEntryCount} baseline entries unchanged).`
+      );
+    }
   } else {
     console.log("  Archive: not created because blocking lint errors remain.");
   }

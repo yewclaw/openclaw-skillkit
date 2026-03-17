@@ -116,7 +116,7 @@ async function handlePack(parsed: ReturnType<typeof parseArgs>): Promise<void> {
 }
 
 async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["format", "json", "source", "against", "report"]);
+  assertNoUnexpectedFlags(parsed, ["format", "json", "source", "against", "report", "entry"]);
   assertArgumentCount(parsed, 1, "inspect expects exactly 1 archive path.");
 
   const archivePath = parsed.positionals[0];
@@ -128,19 +128,21 @@ async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void
     format: parseMachineFormat(parsed, "inspect"),
     sourceDir: typeof getFlag(parsed, "source") === "string" ? String(getFlag(parsed, "source")) : undefined,
     baselineArchivePath: typeof getFlag(parsed, "against") === "string" ? String(getFlag(parsed, "against")) : undefined,
-    reportPath: parseOptionalPathFlag(parsed, "report")
+    reportPath: parseOptionalPathFlag(parsed, "report"),
+    entryPath: typeof getFlag(parsed, "entry") === "string" ? String(getFlag(parsed, "entry")) : undefined
   });
 }
 
 async function handleReview(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["output", "format", "json", "report"]);
+  assertNoUnexpectedFlags(parsed, ["output", "format", "json", "report", "against"]);
   assertArgumentCount(parsed, 1, "review accepts at most 1 target directory.");
 
   const targetDir = parsed.positionals[0] ?? ".";
   const exitCode = await runReview(targetDir, {
     outputPath: typeof getFlag(parsed, "output") === "string" ? String(getFlag(parsed, "output")) : undefined,
     format: parseMachineFormat(parsed, "review"),
-    reportPath: parseOptionalPathFlag(parsed, "report")
+    reportPath: parseOptionalPathFlag(parsed, "report"),
+    baselineArchivePath: typeof getFlag(parsed, "against") === "string" ? String(getFlag(parsed, "against")) : undefined
   });
   process.exitCode = exitCode;
 }
@@ -240,12 +242,13 @@ Examples:
 Inspect a packaged .skill archive and print the embedded manifest.
 
 Usage:
-  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--report [./artifacts/customer-support.report.md]] [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./artifacts/customer-support.report.md]] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit inspect ./artifacts/customer-support.skill
   openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
   openclaw-skillkit inspect ./artifacts/customer-support.skill --against ./artifacts/customer-support-prev.skill
+  openclaw-skillkit inspect ./artifacts/customer-support.skill --entry SKILL.md
   openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
   openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
   openclaw-skillkit inspect ./artifacts/customer-support.skill --json
@@ -259,11 +262,12 @@ Examples:
 Run a release-readiness review for a skill directory.
 
 Usage:
-  openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
+  openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
 
 Examples:
   openclaw-skillkit review
   openclaw-skillkit review skills/customer-support
+  openclaw-skillkit review skills/customer-support --against ./artifacts/customer-support-prev.skill
   openclaw-skillkit review skills/customer-support --output ./artifacts/customer-support.skill --report
   openclaw-skillkit review skills/customer-support --json
 `);
@@ -294,8 +298,8 @@ Usage:
   openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
   openclaw-skillkit lint [dir] [--json|--format text|json]
   openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
-  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
-  openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
+  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
   openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
 
 Help:

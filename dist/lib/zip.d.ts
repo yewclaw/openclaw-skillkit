@@ -22,3 +22,5 @@ export interface SkillArchiveManifest {
 }
 export declare function createSkillArchive(sourceDir: string, destinationFile: string): Promise<SkillArchiveSummary>;
 export declare function readArchiveManifest(archivePath: string): Promise<SkillArchiveManifest>;
+export declare function readArchiveEntryText(archivePath: string, entryName: string): Promise<string>;
+export declare function readArchiveEntryBuffer(archivePath: string, entryName: string): Promise<Buffer>;

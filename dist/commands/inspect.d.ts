@@ -3,5 +3,6 @@ export interface RunInspectOptions {
     sourceDir?: string;
     baselineArchivePath?: string;
     reportPath?: string | boolean;
+    entryPath?: string;
 }
 export declare function runInspect(archivePath: string, options: RunInspectOptions): Promise<void>;

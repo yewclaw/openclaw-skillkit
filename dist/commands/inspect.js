@@ -3,12 +3,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.runInspect = runInspect;
 const workflow_1 = require("../lib/workflow");
 async function runInspect(archivePath, options) {
-    let inspected = await (0, workflow_1.inspectSkillArchive)(archivePath);
+    let inspected = await (0, workflow_1.inspectSkillArchive)(archivePath, {
+        entryPath: options.entryPath
+    });
     if (options.sourceDir) {
-        inspected = await (0, workflow_1.compareArchiveToSource)(archivePath, options.sourceDir);
+        inspected = await (0, workflow_1.compareArchiveToSource)(archivePath, options.sourceDir, {
+            entryPath: options.entryPath
+        });
     }
     if (options.baselineArchivePath) {
-        const compared = await (0, workflow_1.compareArchives)(archivePath, options.baselineArchivePath);
+        const compared = await (0, workflow_1.compareArchives)(archivePath, options.baselineArchivePath, {
+            entryPath: options.entryPath
+        });
         inspected = {
             ...inspected,
             releaseComparison: compared.releaseComparison
@@ -23,6 +29,8 @@ async function runInspect(archivePath, options) {
             trustSummary: trust,
             releaseDeltaSummary: releaseDelta,
             manifest: inspected.manifest,
+            archiveInsights: inspected.archiveInsights,
+            entryPreview: inspected.entryPreview,
             reportPath,
             reportMarkdown: (0, workflow_1.buildArchiveReport)(inspected),
             comparison: "comparison" in inspected ? inspected.comparison : undefined,
@@ -43,6 +51,14 @@ async function runInspect(archivePath, options) {
     console.log(`  Contents: ${inspected.manifest.entries
         .map((entry) => `${entry.path} (${(0, workflow_1.formatBytes)(entry.size)})`)
         .join(", ")}`);
+    if (inspected.archiveInsights) {
+        console.log(`  Layout: ${inspected.archiveInsights.groups
+            .map((group) => `${group.label} ${group.fileCount} file(s), ${(0, workflow_1.formatBytes)(group.totalBytes)}`)
+            .join("; ")}`);
+        console.log(`  Largest: ${inspected.archiveInsights.largestEntries
+            .map((entry) => `${entry.path} (${(0, workflow_1.formatBytes)(entry.size)})`)
+            .join(", ")}`);
+    }
     if (hasComparison(inspected)) {
         const { comparison } = inspected;
         console.log(`  Source: ${comparison.sourceDir}`);
@@ -91,6 +107,13 @@ async function runInspect(archivePath, options) {
     }
     if (!hasReleaseComparison(inspected)) {
         console.log(`  Release history: run openclaw-skillkit inspect ${inspected.archivePath} --against ./previous-release.skill to compare against a prior artifact.`);
+    }
+    if (inspected.entryPreview) {
+        console.log(`  Entry preview: ${inspected.entryPreview.path} (${inspected.entryPreview.text ? "text" : "binary"})`);
+        console.log(inspected.entryPreview.preview);
+    }
+    else {
+        console.log(`  Entry preview: run openclaw-skillkit inspect ${inspected.archivePath} --entry SKILL.md to inspect a bundled file.`);
     }
     if (reportPath) {
         console.log(`  Report: ${reportPath}`);

@@ -20,6 +20,8 @@ test("studio assets expose the local app shell and workflow controls", () => {
   assert.match(assets.html, /id="inspect-form"/);
   assert.match(assets.html, /id="inspect-source-input"/);
   assert.match(assets.html, /id="inspect-baseline-input"/);
+  assert.match(assets.html, /id="inspect-entry-input"/);
+  assert.match(assets.html, /id="review-baseline-input"/);
   assert.match(assets.html, /id="review-button"/);
   assert.match(assets.html, /id="review-summary"/);
   assert.match(assets.html, /id="review-result"/);
@@ -35,11 +37,15 @@ test("studio assets expose the local app shell and workflow controls", () => {
   assert.match(assets.js, /api\("\/api\/lint"/);
   assert.match(assets.js, /api\("\/api\/review"/);
   assert.match(assets.js, /baselineArchivePath: inspectBaselineInput\.value/);
+  assert.match(assets.js, /entryPath: inspectEntryInput\.value/);
+  assert.match(assets.js, /baselineArchivePath: reviewBaselineInput\.value/);
   assert.match(assets.js, /formatPackResult/);
   assert.match(assets.js, /formatReviewResult/);
   assert.match(assets.js, /renderSummaryCards/);
   assert.match(assets.js, /buildReviewSummaryCards/);
   assert.match(assets.js, /buildInspectSummaryCards/);
+  assert.match(assets.js, /Entry preview/);
+  assert.match(assets.js, /Largest files:/);
   assert.match(assets.js, /compareArchiveToSource|source comparison/i);
   assert.match(assets.js, /Release delta/);
   assert.match(assets.js, /Release report:/);

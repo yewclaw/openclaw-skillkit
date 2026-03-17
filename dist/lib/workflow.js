@@ -17,6 +17,8 @@ exports.resolveArchiveReportPath = resolveArchiveReportPath;
 exports.resolveReviewReportPath = resolveReviewReportPath;
 exports.writeArchiveReport = writeArchiveReport;
 exports.writeReviewReport = writeReviewReport;
+exports.summarizeArchiveContents = summarizeArchiveContents;
+exports.previewArchiveEntry = previewArchiveEntry;
 exports.buildArchiveReport = buildArchiveReport;
 exports.buildReviewReport = buildReviewReport;
 exports.summarizeArchiveTrust = summarizeArchiveTrust;
@@ -141,15 +143,20 @@ async function packSkill(targetDir, outputPath) {
         manifest: archive.manifest
     };
 }
-async function inspectSkillArchive(archivePath) {
+async function inspectSkillArchive(archivePath, options = {}) {
     const resolvedArchivePath = node_path_1.default.resolve(archivePath);
     const manifest = await (0, zip_1.readArchiveManifest)(resolvedArchivePath);
+    const entryPreview = options.entryPath
+        ? await previewArchiveEntry(resolvedArchivePath, manifest, options.entryPath)
+        : undefined;
     return {
         archivePath: resolvedArchivePath,
-        manifest
+        manifest,
+        archiveInsights: summarizeArchiveContents(manifest),
+        entryPreview
     };
 }
-async function reviewSkill(targetDir, outputPath) {
+async function reviewSkill(targetDir, outputPath, baselineArchivePath) {
     const resolvedDir = node_path_1.default.resolve(targetDir);
     const lintResult = await (0, skill_1.lintSkill)(resolvedDir);
     const summary = summarizeLintResult(lintResult);
@@ -178,13 +185,17 @@ async function reviewSkill(targetDir, outputPath) {
         ...packed,
         comparison: inspected.comparison
     };
+    if (baselineArchivePath) {
+        const releaseCompared = await compareArchives(packed.destination, baselineArchivePath);
+        review.archive.releaseComparison = releaseCompared.releaseComparison;
+    }
     if (!inspected.comparison.matches) {
         review.readiness = "not-ready";
     }
     return review;
 }
-async function compareArchiveToSource(archivePath, sourceDir) {
-    const inspected = await inspectSkillArchive(archivePath);
+async function compareArchiveToSource(archivePath, sourceDir, options = {}) {
+    const inspected = await inspectSkillArchive(archivePath, options);
     const resolvedSourceDir = node_path_1.default.resolve(sourceDir);
     const sourceSkillFile = node_path_1.default.join(resolvedSourceDir, "SKILL.md");
     if (!(await (0, fs_1.exists)(sourceSkillFile))) {
@@ -257,8 +268,8 @@ async function compareArchiveToSource(archivePath, sourceDir) {
         }
     };
 }
-async function compareArchives(archivePath, baselineArchivePath) {
-    const current = await inspectSkillArchive(archivePath);
+async function compareArchives(archivePath, baselineArchivePath, options = {}) {
+    const current = await inspectSkillArchive(archivePath, options);
     const baseline = await inspectSkillArchive(baselineArchivePath);
     const currentByPath = new Map(current.manifest.entries.map((entry) => [
         entry.path,
@@ -358,9 +369,72 @@ async function writeReviewReport(review, requestedPath) {
     await (0, fs_1.writeTextFile)(reportPath, buildReviewReport(review));
     return reportPath;
 }
+function summarizeArchiveContents(manifest) {
+    const grouped = new Map();
+    for (const entry of manifest.entries) {
+        const root = entry.path.includes("/") ? entry.path.split("/")[0] : "root";
+        const label = root === "root" ? "root files" : `${root}/`;
+        const current = grouped.get(label) ?? { label, fileCount: 0, totalBytes: 0 };
+        current.fileCount += 1;
+        current.totalBytes += entry.size;
+        grouped.set(label, current);
+    }
+    return {
+        groups: [...grouped.values()].sort((left, right) => right.totalBytes - left.totalBytes || left.label.localeCompare(right.label)),
+        largestEntries: [...manifest.entries]
+            .sort((left, right) => right.size - left.size || left.path.localeCompare(right.path))
+            .slice(0, 3)
+            .map((entry) => ({
+            path: entry.path,
+            size: entry.size
+        }))
+    };
+}
+async function previewArchiveEntry(archivePath, manifest, entryPath) {
+    const requestedPath = entryPath.trim();
+    const entry = manifest.entries.find((candidate) => candidate.path === requestedPath);
+    if (!entry) {
+        throw new Error(`Archive entry not found in manifest: ${requestedPath}`);
+    }
+    const buffer = await (0, zip_1.readArchiveEntryBuffer)(archivePath, requestedPath);
+    const text = isLikelyTextBuffer(buffer);
+    if (!text) {
+        return {
+            path: requestedPath,
+            size: entry.size,
+            sha256: entry.sha256,
+            text: false,
+            truncated: false,
+            lineCount: 0,
+            preview: "Preview unavailable because this entry appears to be binary."
+        };
+    }
+    const rawText = buffer.toString("utf8");
+    const lines = rawText.split(/\r?\n/);
+    const maxLines = 80;
+    const visibleLines = lines.slice(0, maxLines);
+    let preview = visibleLines.join("\n");
+    const truncated = lines.length > maxLines || Buffer.byteLength(preview, "utf8") < buffer.length;
+    if (preview.length > 6000) {
+        preview = preview.slice(0, 6000);
+    }
+    if (truncated) {
+        preview = `${preview}\n\n[preview truncated]`;
+    }
+    return {
+        path: requestedPath,
+        size: entry.size,
+        sha256: entry.sha256,
+        text: true,
+        truncated,
+        lineCount: lines.length,
+        preview
+    };
+}
 function buildArchiveReport(result) {
     const generatedAt = new Date().toISOString();
     const trust = summarizeArchiveTrust(result);
+    const insights = result.archiveInsights ?? summarizeArchiveContents(result.manifest);
     const lines = [
         "# OpenClaw Skill Archive Report",
         "",
@@ -378,7 +452,15 @@ function buildArchiveReport(result) {
     if (trust.nextStep) {
         lines.push(`- Next step: ${trust.nextStep}`);
     }
-    lines.push("", "## Archive", `- Archive: ${result.archivePath}`, `- Skill: ${result.manifest.skill.name}@${result.manifest.skill.version}`, `- Description: ${result.manifest.skill.description}`, `- Packaged at: ${result.manifest.packagedAt}`, `- Manifest schema: v${result.manifest.schemaVersion}`, `- Bundled files: ${result.manifest.entryCount}`, `- Total bundled bytes: ${formatBytes(result.manifest.totalBytes)}`, "", "## Contents");
+    lines.push("", "## Archive", `- Archive: ${result.archivePath}`, `- Skill: ${result.manifest.skill.name}@${result.manifest.skill.version}`, `- Description: ${result.manifest.skill.description}`, `- Packaged at: ${result.manifest.packagedAt}`, `- Manifest schema: v${result.manifest.schemaVersion}`, `- Bundled files: ${result.manifest.entryCount}`, `- Total bundled bytes: ${formatBytes(result.manifest.totalBytes)}`, "", "## Layout");
+    for (const group of insights.groups) {
+        lines.push(`- ${group.label}: ${group.fileCount} file(s), ${formatBytes(group.totalBytes)}`);
+    }
+    lines.push("", "## Largest Files");
+    for (const entry of insights.largestEntries) {
+        lines.push(`- \`${entry.path}\` (${formatBytes(entry.size)})`);
+    }
+    lines.push("", "## Contents");
     for (const entry of result.manifest.entries) {
         lines.push(`- \`${entry.path}\` (${formatBytes(entry.size)}, sha256 \`${entry.sha256 ?? "n/a"}\`)`);
     }
@@ -446,6 +528,10 @@ function buildArchiveReport(result) {
         lines.push(`- Status: packaged artifact reviewed without source comparison`);
         lines.push(`- Next: run \`openclaw-skillkit inspect ${result.archivePath} --source ./path-to-skill\` to include drift status`);
     }
+    if (result.entryPreview) {
+        lines.push("", "## Entry Preview", `- Entry: ${result.entryPreview.path}`, `- Size: ${formatBytes(result.entryPreview.size)}`, `- Lines: ${result.entryPreview.lineCount}`, `- Text preview: ${result.entryPreview.text ? "yes" : "no"}`);
+        lines.push("", "```text", result.entryPreview.preview, "```");
+    }
     lines.push("", "## Reviewer Checklist", "- Confirm the skill name, version, and description match the release you intend to share.", "- Confirm every referenced helper file is bundled in the archive contents above.", "- If source comparison was included, resolve any reported drift before publication.", "- If a baseline archive was included, confirm the release delta matches what you intended to ship.");
     return lines.join("\n");
 }
@@ -483,6 +569,9 @@ function buildReviewReport(review) {
     }
     if (review.archive) {
         lines.push("", "## Archive", `- Archive: ${review.archive.destination}`, `- Size: ${review.archive.archiveSizeLabel}`, `- Skill: ${review.archive.manifest.skill.name}@${review.archive.manifest.skill.version}`, `- Bundled files: ${review.archive.manifest.entryCount}`, `- Drift check: ${review.archive.comparison.matches ? "matches source" : "drift detected"}`, `- Matched entries: ${review.archive.comparison.matchedEntries}/${review.archive.comparison.entryCount}`);
+        if (review.archive.releaseComparison) {
+            lines.push(`- Baseline archive: ${review.archive.releaseComparison.baselineArchivePath}`, `- Release delta: ${review.archive.releaseComparison.matches ? "matches baseline archive" : "release changed"}`, `- Matched baseline entries: ${review.archive.releaseComparison.matchedEntries}/${review.archive.releaseComparison.baselineEntryCount}`);
+        }
         if (review.archive.warnings.length > 0) {
             lines.push("", "## Packaging Warnings");
             for (const warning of review.archive.warnings) {
@@ -602,10 +691,21 @@ function summarizeReviewReadiness(review) {
         status: mapTrustStatusToAssessment(trust.status),
         detail: trust.headline.toLowerCase()
     });
+    if (review.archive.releaseComparison) {
+        checks.push({
+            label: "Release delta",
+            status: review.archive.releaseComparison.matches ? "pass" : "warn",
+            detail: review.archive.releaseComparison.matches
+                ? "no archive-level changes were detected against the baseline"
+                : buildReleaseDeltaDetail(review.archive.releaseComparison)
+        });
+    }
     if (review.readiness === "ready") {
         return {
-            headline: "Ready to ship",
-            confidence: "Lint passed cleanly, the archive was created, and the packaged artifact still matches the source.",
+            headline: review.archive.releaseComparison ? "Ready to ship with reviewed release delta" : "Ready to ship",
+            confidence: review.archive.releaseComparison
+                ? "Lint passed cleanly, the archive matches the source, and the release delta against the baseline is captured for handoff."
+                : "Lint passed cleanly, the archive was created, and the packaged artifact still matches the source.",
             checks
         };
     }
@@ -821,6 +921,21 @@ function defaultReviewReportFileName(skillDir, archivePath) {
         return `${resolvedArchivePath}.review.md`;
     }
     return `${node_path_1.default.resolve(skillDir)}.review.md`;
+}
+function isLikelyTextBuffer(buffer) {
+    if (buffer.length === 0) {
+        return true;
+    }
+    let suspicious = 0;
+    for (const byte of buffer) {
+        if (byte === 0) {
+            return false;
+        }
+        if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) {
+            suspicious += 1;
+        }
+    }
+    return suspicious / buffer.length < 0.15;
 }
 function formatReviewReadiness(readiness) {
     switch (readiness) {

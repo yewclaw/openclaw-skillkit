@@ -90,8 +90,12 @@ export async function createSkillArchive(sourceDir: string, destinationFile: str
 }
 
 export async function readArchiveManifest(archivePath: string): Promise<SkillArchiveManifest> {
-  const manifest = await readArchiveEntry(archivePath, PACK_MANIFEST_PATH);
+  const manifest = (await readArchiveEntryBuffer(archivePath, PACK_MANIFEST_PATH)).toString("utf8");
   return JSON.parse(manifest) as SkillArchiveManifest;
+}
+
+export async function readArchiveEntryText(archivePath: string, entryName: string): Promise<string> {
+  return (await readArchiveEntryBuffer(archivePath, entryName)).toString("utf8");
 }
 
 function compareArchiveEntries(
@@ -146,7 +150,7 @@ function hashBuffer(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
-async function readArchiveEntry(archivePath: string, entryName: string): Promise<string> {
+export async function readArchiveEntryBuffer(archivePath: string, entryName: string): Promise<Buffer> {
   const buffer = await readFile(archivePath);
   let offset = 0;
 
@@ -166,7 +170,7 @@ async function readArchiveEntry(archivePath: string, entryName: string): Promise
     const dataEnd = dataStart + compressedSize;
 
     if (currentEntryName === entryName) {
-      return buffer.toString("utf8", dataStart, dataEnd);
+      return buffer.subarray(dataStart, dataEnd);
     }
 
     offset = dataEnd;

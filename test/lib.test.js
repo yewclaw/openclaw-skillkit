@@ -13,8 +13,11 @@ const {
   buildReviewReport,
   compareArchiveToSource,
   compareArchives,
+  inspectSkillArchive,
   packSkill,
+  previewArchiveEntry,
   reviewSkill,
+  summarizeArchiveContents,
   summarizeReleaseDelta
 } = require("../dist/lib/workflow.js");
 const {
@@ -373,6 +376,25 @@ Verify that artifact inspection can detect source drift.
   assert.match(report, /### Changed Files/);
 });
 
+test("archive workflow can summarize contents and preview a bundled entry", async () => {
+  const skillDir = path.resolve(__dirname, "fixtures", "valid", "basic-skill");
+  const tempDir = await makeTempDir("openclaw-archive-preview-");
+  const archivePath = path.join(tempDir, "artifact.skill");
+
+  const packed = await packSkill(skillDir, archivePath);
+  const insights = summarizeArchiveContents(packed.manifest);
+  assert.equal(insights.groups.some((group) => group.label === "root files"), true);
+  assert.equal(insights.largestEntries.length > 0, true);
+
+  const preview = await previewArchiveEntry(archivePath, packed.manifest, "SKILL.md");
+  assert.equal(preview.text, true);
+  assert.match(preview.preview, /# Weather Research/);
+
+  const inspected = await inspectSkillArchive(archivePath, { entryPath: "SKILL.md" });
+  assert.equal(inspected.entryPreview.path, "SKILL.md");
+  assert.equal(inspected.archiveInsights.groups.length > 0, true);
+});
+
 test("reviewSkill produces a ready verdict and combined review report for a valid skill", async () => {
   const skillDir = path.resolve(__dirname, "fixtures", "valid", "basic-skill");
   const tempDir = await makeTempDir("openclaw-review-valid-");
@@ -387,6 +409,21 @@ test("reviewSkill produces a ready verdict and combined review report for a vali
   const report = buildReviewReport(review);
   assert.match(report, /# OpenClaw Skill Review Report/);
   assert.match(report, /Verdict: ready to ship/);
+});
+
+test("reviewSkill can include a baseline archive comparison", async () => {
+  const tempDir = await makeTempDir("openclaw-review-skill-baseline-");
+  const skillDir = path.join(tempDir, "skill");
+  const baselineArchivePath = path.join(tempDir, "baseline.skill");
+  const currentArchivePath = path.join(tempDir, "current.skill");
+
+  await fs.cp(path.resolve(__dirname, "fixtures", "valid", "basic-skill"), skillDir, { recursive: true });
+  await packSkill(skillDir, baselineArchivePath);
+  await fs.appendFile(path.join(skillDir, "references", "README.md"), "\nRelease note delta.\n");
+
+  const review = await reviewSkill(skillDir, currentArchivePath, baselineArchivePath);
+  assert.equal(review.archive.releaseComparison.matches, false);
+  assert.match(buildReviewReport(review), /Release delta: release changed/);
 });
 
 test("reviewSkill stops before packaging when blocking lint errors remain", async () => {

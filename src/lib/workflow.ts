@@ -5,7 +5,12 @@ import { ensureDir, exists, listFilesRecursive, readTextFile, writeTextFile } fr
 import { parseFrontmatter } from "./frontmatter";
 import { type LintResult, lintSkill } from "./skill";
 import { TEMPLATE_MODES, type TemplateMode } from "./templates";
-import { createSkillArchive, readArchiveManifest, type SkillArchiveManifest } from "./zip";
+import {
+  createSkillArchive,
+  readArchiveEntryBuffer,
+  readArchiveManifest,
+  type SkillArchiveManifest
+} from "./zip";
 
 export interface LintSummary {
   total: number;
@@ -61,6 +66,7 @@ export interface SkillReviewResult {
   };
   archive?: PackSkillResult & {
     comparison: ArchiveSourceComparison;
+    releaseComparison?: ArchiveReleaseComparison;
   };
 }
 
@@ -115,6 +121,30 @@ export interface InspectedArchiveResult {
   manifest: SkillArchiveManifest;
   comparison?: ArchiveSourceComparison;
   releaseComparison?: ArchiveReleaseComparison;
+  archiveInsights?: ArchiveInsights;
+  entryPreview?: ArchiveEntryPreview;
+}
+
+export interface ArchiveInsights {
+  groups: Array<{
+    label: string;
+    fileCount: number;
+    totalBytes: number;
+  }>;
+  largestEntries: Array<{
+    path: string;
+    size: number;
+  }>;
+}
+
+export interface ArchiveEntryPreview {
+  path: string;
+  size: number;
+  sha256?: string;
+  text: boolean;
+  truncated: boolean;
+  lineCount: number;
+  preview: string;
 }
 
 export type AssessmentStatus = "pass" | "warn" | "fail";
@@ -291,18 +321,28 @@ export async function packSkill(targetDir: string, outputPath?: string): Promise
 }
 
 export async function inspectSkillArchive(
-  archivePath: string
+  archivePath: string,
+  options: { entryPath?: string } = {}
 ): Promise<InspectedArchiveResult> {
   const resolvedArchivePath = path.resolve(archivePath);
   const manifest = await readArchiveManifest(resolvedArchivePath);
+  const entryPreview = options.entryPath
+    ? await previewArchiveEntry(resolvedArchivePath, manifest, options.entryPath)
+    : undefined;
 
   return {
     archivePath: resolvedArchivePath,
-    manifest
+    manifest,
+    archiveInsights: summarizeArchiveContents(manifest),
+    entryPreview
   };
 }
 
-export async function reviewSkill(targetDir: string, outputPath?: string): Promise<SkillReviewResult> {
+export async function reviewSkill(
+  targetDir: string,
+  outputPath?: string,
+  baselineArchivePath?: string
+): Promise<SkillReviewResult> {
   const resolvedDir = path.resolve(targetDir);
   const lintResult = await lintSkill(resolvedDir);
   const summary = summarizeLintResult(lintResult);
@@ -335,6 +375,11 @@ export async function reviewSkill(targetDir: string, outputPath?: string): Promi
     comparison: inspected.comparison
   };
 
+  if (baselineArchivePath) {
+    const releaseCompared = await compareArchives(packed.destination, baselineArchivePath);
+    review.archive.releaseComparison = releaseCompared.releaseComparison;
+  }
+
   if (!inspected.comparison.matches) {
     review.readiness = "not-ready";
   }
@@ -344,9 +389,10 @@ export async function reviewSkill(targetDir: string, outputPath?: string): Promi
 
 export async function compareArchiveToSource(
   archivePath: string,
-  sourceDir: string
+  sourceDir: string,
+  options: { entryPath?: string } = {}
 ): Promise<InspectedArchiveResult> {
-  const inspected = await inspectSkillArchive(archivePath);
+  const inspected = await inspectSkillArchive(archivePath, options);
   const resolvedSourceDir = path.resolve(sourceDir);
   const sourceSkillFile = path.join(resolvedSourceDir, "SKILL.md");
 
@@ -435,9 +481,10 @@ export async function compareArchiveToSource(
 
 export async function compareArchives(
   archivePath: string,
-  baselineArchivePath: string
+  baselineArchivePath: string,
+  options: { entryPath?: string } = {}
 ): Promise<InspectedArchiveResult> {
-  const current = await inspectSkillArchive(archivePath);
+  const current = await inspectSkillArchive(archivePath, options);
   const baseline = await inspectSkillArchive(baselineArchivePath);
   const currentByPath = new Map(
     current.manifest.entries.map((entry) => [
@@ -567,9 +614,86 @@ export async function writeReviewReport(
   return reportPath;
 }
 
+export function summarizeArchiveContents(manifest: SkillArchiveManifest): ArchiveInsights {
+  const grouped = new Map<string, { label: string; fileCount: number; totalBytes: number }>();
+
+  for (const entry of manifest.entries) {
+    const root = entry.path.includes("/") ? entry.path.split("/")[0] : "root";
+    const label = root === "root" ? "root files" : `${root}/`;
+    const current = grouped.get(label) ?? { label, fileCount: 0, totalBytes: 0 };
+    current.fileCount += 1;
+    current.totalBytes += entry.size;
+    grouped.set(label, current);
+  }
+
+  return {
+    groups: [...grouped.values()].sort((left, right) => right.totalBytes - left.totalBytes || left.label.localeCompare(right.label)),
+    largestEntries: [...manifest.entries]
+      .sort((left, right) => right.size - left.size || left.path.localeCompare(right.path))
+      .slice(0, 3)
+      .map((entry) => ({
+        path: entry.path,
+        size: entry.size
+      }))
+  };
+}
+
+export async function previewArchiveEntry(
+  archivePath: string,
+  manifest: SkillArchiveManifest,
+  entryPath: string
+): Promise<ArchiveEntryPreview> {
+  const requestedPath = entryPath.trim();
+  const entry = manifest.entries.find((candidate) => candidate.path === requestedPath);
+  if (!entry) {
+    throw new Error(`Archive entry not found in manifest: ${requestedPath}`);
+  }
+
+  const buffer = await readArchiveEntryBuffer(archivePath, requestedPath);
+  const text = isLikelyTextBuffer(buffer);
+
+  if (!text) {
+    return {
+      path: requestedPath,
+      size: entry.size,
+      sha256: entry.sha256,
+      text: false,
+      truncated: false,
+      lineCount: 0,
+      preview: "Preview unavailable because this entry appears to be binary."
+    };
+  }
+
+  const rawText = buffer.toString("utf8");
+  const lines = rawText.split(/\r?\n/);
+  const maxLines = 80;
+  const visibleLines = lines.slice(0, maxLines);
+  let preview = visibleLines.join("\n");
+  const truncated = lines.length > maxLines || Buffer.byteLength(preview, "utf8") < buffer.length;
+
+  if (preview.length > 6000) {
+    preview = preview.slice(0, 6000);
+  }
+
+  if (truncated) {
+    preview = `${preview}\n\n[preview truncated]`;
+  }
+
+  return {
+    path: requestedPath,
+    size: entry.size,
+    sha256: entry.sha256,
+    text: true,
+    truncated,
+    lineCount: lines.length,
+    preview
+  };
+}
+
 export function buildArchiveReport(result: InspectedArchiveResult): string {
   const generatedAt = new Date().toISOString();
   const trust = summarizeArchiveTrust(result);
+  const insights = result.archiveInsights ?? summarizeArchiveContents(result.manifest);
   const lines = [
     "# OpenClaw Skill Archive Report",
     "",
@@ -600,6 +724,24 @@ export function buildArchiveReport(result: InspectedArchiveResult): string {
     `- Manifest schema: v${result.manifest.schemaVersion}`,
     `- Bundled files: ${result.manifest.entryCount}`,
     `- Total bundled bytes: ${formatBytes(result.manifest.totalBytes)}`,
+    "",
+    "## Layout"
+  );
+
+  for (const group of insights.groups) {
+    lines.push(`- ${group.label}: ${group.fileCount} file(s), ${formatBytes(group.totalBytes)}`);
+  }
+
+  lines.push(
+    "",
+    "## Largest Files"
+  );
+
+  for (const entry of insights.largestEntries) {
+    lines.push(`- \`${entry.path}\` (${formatBytes(entry.size)})`);
+  }
+
+  lines.push(
     "",
     "## Contents"
   );
@@ -707,6 +849,19 @@ export function buildArchiveReport(result: InspectedArchiveResult): string {
     lines.push(`- Next: run \`openclaw-skillkit inspect ${result.archivePath} --source ./path-to-skill\` to include drift status`);
   }
 
+  if (result.entryPreview) {
+    lines.push(
+      "",
+      "## Entry Preview",
+      `- Entry: ${result.entryPreview.path}`,
+      `- Size: ${formatBytes(result.entryPreview.size)}`,
+      `- Lines: ${result.entryPreview.lineCount}`,
+      `- Text preview: ${result.entryPreview.text ? "yes" : "no"}`
+    );
+
+    lines.push("", "```text", result.entryPreview.preview, "```");
+  }
+
   lines.push(
     "",
     "## Reviewer Checklist",
@@ -774,6 +929,14 @@ export function buildReviewReport(review: SkillReviewResult): string {
       `- Drift check: ${review.archive.comparison.matches ? "matches source" : "drift detected"}`,
       `- Matched entries: ${review.archive.comparison.matchedEntries}/${review.archive.comparison.entryCount}`
     );
+
+    if (review.archive.releaseComparison) {
+      lines.push(
+        `- Baseline archive: ${review.archive.releaseComparison.baselineArchivePath}`,
+        `- Release delta: ${review.archive.releaseComparison.matches ? "matches baseline archive" : "release changed"}`,
+        `- Matched baseline entries: ${review.archive.releaseComparison.matchedEntries}/${review.archive.releaseComparison.baselineEntryCount}`
+      );
+    }
 
     if (review.archive.warnings.length > 0) {
       lines.push("", "## Packaging Warnings");
@@ -910,10 +1073,22 @@ export function summarizeReviewReadiness(review: SkillReviewResult): ReviewSumma
     detail: trust.headline.toLowerCase()
   });
 
+  if (review.archive.releaseComparison) {
+    checks.push({
+      label: "Release delta",
+      status: review.archive.releaseComparison.matches ? "pass" : "warn",
+      detail: review.archive.releaseComparison.matches
+        ? "no archive-level changes were detected against the baseline"
+        : buildReleaseDeltaDetail(review.archive.releaseComparison)
+    });
+  }
+
   if (review.readiness === "ready") {
     return {
-      headline: "Ready to ship",
-      confidence: "Lint passed cleanly, the archive was created, and the packaged artifact still matches the source.",
+      headline: review.archive.releaseComparison ? "Ready to ship with reviewed release delta" : "Ready to ship",
+      confidence: review.archive.releaseComparison
+        ? "Lint passed cleanly, the archive matches the source, and the release delta against the baseline is captured for handoff."
+        : "Lint passed cleanly, the archive was created, and the packaged artifact still matches the source.",
       checks
     };
   }
@@ -1187,6 +1362,26 @@ function defaultReviewReportFileName(skillDir: string, archivePath?: string): st
   }
 
   return `${path.resolve(skillDir)}.review.md`;
+}
+
+function isLikelyTextBuffer(buffer: Buffer): boolean {
+  if (buffer.length === 0) {
+    return true;
+  }
+
+  let suspicious = 0;
+
+  for (const byte of buffer) {
+    if (byte === 0) {
+      return false;
+    }
+
+    if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) {
+      suspicious += 1;
+    }
+  }
+
+  return suspicious / buffer.length < 0.15;
 }
 
 function formatReviewReadiness(readiness: ReviewReadiness): string {

@@ -434,6 +434,7 @@ serialTest("cli help documents archive-to-archive inspection", async () => {
 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /--against \.\/previous\.skill/);
+  assert.match(result.stdout, /--entry SKILL\.md/);
   assert.match(result.stdout, /customer-support-prev\.skill/);
 });
 
@@ -529,6 +530,21 @@ serialTest("cli inspect json can include both source and baseline comparisons", 
   assert.match(payload.reportMarkdown, /## Release Delta/);
 });
 
+serialTest("cli inspect can preview a bundled archive entry", async () => {
+  const tempDir = await makeTempDir("openclaw-inspect-entry-");
+  const skillDir = path.join(tempDir, "skill");
+  const outputPath = path.join(tempDir, "artifact.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+  const packResult = await runCli(["pack", skillDir, "--output", outputPath]);
+  assert.equal(packResult.code, 0, packResult.stderr);
+
+  const result = await runCli(["inspect", outputPath, "--entry", "SKILL.md"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Entry preview: SKILL\.md \(text\)/);
+  assert.match(result.stdout, /# Weather Research/);
+});
+
 serialTest("cli review packages a valid skill and reports readiness", async () => {
   const tempDir = await makeTempDir("openclaw-review-cli-");
   const skillDir = path.join(tempDir, "skill");
@@ -549,6 +565,27 @@ serialTest("cli review packages a valid skill and reports readiness", async () =
   assert.match(report, /# OpenClaw Skill Review Report/);
   assert.match(report, /## Release Summary/);
   assert.match(report, /Verdict: ready to ship/);
+});
+
+serialTest("cli review can include a baseline archive delta", async () => {
+  const tempDir = await makeTempDir("openclaw-review-baseline-");
+  const skillDir = path.join(tempDir, "skill");
+  const baselineArchivePath = path.join(tempDir, "baseline.skill");
+  const currentArchivePath = path.join(tempDir, "current.skill");
+  await copyFixture(path.join("valid", "basic-skill"), skillDir);
+
+  let result = await runCli(["pack", skillDir, "--output", baselineArchivePath]);
+  assert.equal(result.code, 0, result.stderr);
+
+  await fs.appendFile(path.join(skillDir, "references", "README.md"), "\nBaseline delta for review.\n");
+
+  result = await runCli(["review", skillDir, "--output", currentArchivePath, "--against", baselineArchivePath, "--json"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.match(payload.releaseSummary.headline, /release delta/i);
+  assert.equal(payload.archive.releaseComparison.matches, false);
+  assert.match(payload.reportMarkdown, /Baseline archive:/);
 });
 
 serialTest("cli review stops before packaging when the skill is not ready", async () => {

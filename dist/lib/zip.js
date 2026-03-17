@@ -5,6 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSkillArchive = createSkillArchive;
 exports.readArchiveManifest = readArchiveManifest;
+exports.readArchiveEntryText = readArchiveEntryText;
+exports.readArchiveEntryBuffer = readArchiveEntryBuffer;
 const node_crypto_1 = require("node:crypto");
 const promises_1 = require("node:fs/promises");
 const node_path_1 = __importDefault(require("node:path"));
@@ -55,8 +57,11 @@ async function createSkillArchive(sourceDir, destinationFile) {
     };
 }
 async function readArchiveManifest(archivePath) {
-    const manifest = await readArchiveEntry(archivePath, PACK_MANIFEST_PATH);
+    const manifest = (await readArchiveEntryBuffer(archivePath, PACK_MANIFEST_PATH)).toString("utf8");
     return JSON.parse(manifest);
+}
+async function readArchiveEntryText(archivePath, entryName) {
+    return (await readArchiveEntryBuffer(archivePath, entryName)).toString("utf8");
 }
 function compareArchiveEntries(left, right) {
     if (left.relativePath === "SKILL.md") {
@@ -95,7 +100,7 @@ async function buildArchiveManifest(sourceDir, files) {
 function hashBuffer(buffer) {
     return (0, node_crypto_1.createHash)("sha256").update(buffer).digest("hex");
 }
-async function readArchiveEntry(archivePath, entryName) {
+async function readArchiveEntryBuffer(archivePath, entryName) {
     const buffer = await (0, promises_1.readFile)(archivePath);
     let offset = 0;
     while (offset + 30 <= buffer.length) {
@@ -112,7 +117,7 @@ async function readArchiveEntry(archivePath, entryName) {
         const dataStart = fileNameEnd + extraFieldLength;
         const dataEnd = dataStart + compressedSize;
         if (currentEntryName === entryName) {
-            return buffer.toString("utf8", dataStart, dataEnd);
+            return buffer.subarray(dataStart, dataEnd);
         }
         offset = dataEnd;
     }

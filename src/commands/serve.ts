@@ -187,7 +187,13 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
       const body = await readJsonBody(request);
       const targetDir = requireString(body.targetDir, "targetDir");
       const outputPath = typeof body.outputPath === "string" && body.outputPath.trim() ? body.outputPath : undefined;
-      const review = await reviewSkill(targetDir, outputPath);
+      const review = await reviewSkill(
+        targetDir,
+        outputPath,
+        typeof body.baselineArchivePath === "string" && body.baselineArchivePath.trim()
+          ? body.baselineArchivePath
+          : undefined
+      );
 
       sendJson(response, 200, {
         ...review,
@@ -200,13 +206,14 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
     if (method === "POST" && url.pathname === "/api/inspect") {
       const body = await readJsonBody(request);
       const archivePath = requireString(body.archivePath, "archivePath");
+      const entryPath = typeof body.entryPath === "string" && body.entryPath.trim() ? body.entryPath : undefined;
       let inspected =
         typeof body.sourceDir === "string" && body.sourceDir.trim()
-          ? await compareArchiveToSource(archivePath, body.sourceDir)
-          : await inspectSkillArchive(archivePath);
+          ? await compareArchiveToSource(archivePath, body.sourceDir, { entryPath })
+          : await inspectSkillArchive(archivePath, { entryPath });
 
       if (typeof body.baselineArchivePath === "string" && body.baselineArchivePath.trim()) {
-        const releaseCompared = await compareArchives(archivePath, body.baselineArchivePath);
+        const releaseCompared = await compareArchives(archivePath, body.baselineArchivePath, { entryPath });
         inspected = {
           ...inspected,
           releaseComparison: releaseCompared.releaseComparison
@@ -447,6 +454,11 @@ Recommended flow:
             <span>Archive output path</span>
             <input id="output-path-input" placeholder="./artifacts/customer-support.skill" />
           </label>
+          <label>
+            <span>Baseline archive for review</span>
+            <input id="review-baseline-input" placeholder="./artifacts/customer-support-prev.skill" />
+            <small>Optional. Include archive-to-archive release deltas in the review verdict.</small>
+          </label>
           <pre id="lint-result" class="result-card muted">Lint output will appear here.
 
 Expected outcome:
@@ -486,6 +498,11 @@ Use this when you want one release-readiness verdict with lint, packaging, and a
             <span>Compare with previous archive</span>
             <input id="inspect-baseline-input" placeholder="./artifacts/weather-research-prev.skill" />
             <small>Optional. Show the release delta between this archive and a previous shipped artifact.</small>
+          </label>
+          <label>
+            <span>Preview bundled entry</span>
+            <input id="inspect-entry-input" placeholder="SKILL.md" />
+            <small>Optional. Open one bundled file directly from the archive for a quick trust check.</small>
           </label>
           <div id="inspect-summary" class="summary-grid"></div>
           <pre id="inspect-result" class="result-card muted">Manifest details will appear here.
@@ -970,9 +987,11 @@ const lintForm = document.querySelector("#lint-form");
 const inspectForm = document.querySelector("#inspect-form");
 const skillDirInput = document.querySelector("#skill-dir-input");
 const outputPathInput = document.querySelector("#output-path-input");
+const reviewBaselineInput = document.querySelector("#review-baseline-input");
 const archivePathInput = document.querySelector("#archive-path-input");
 const inspectSourceInput = document.querySelector("#inspect-source-input");
 const inspectBaselineInput = document.querySelector("#inspect-baseline-input");
+const inspectEntryInput = document.querySelector("#inspect-entry-input");
 const initResult = document.querySelector("#init-result");
 const lintResult = document.querySelector("#lint-result");
 const packResult = document.querySelector("#pack-result");
@@ -1169,7 +1188,8 @@ reviewButton.addEventListener("click", async () => {
   try {
     const result = await api("/api/review", {
       targetDir: skillDirInput.value,
-      outputPath: outputPathInput.value || undefined
+      outputPath: outputPathInput.value || undefined,
+      baselineArchivePath: reviewBaselineInput.value || undefined
     });
 
     if (result.archive) {
@@ -1208,7 +1228,8 @@ inspectForm.addEventListener("submit", async (event) => {
     const result = await api("/api/inspect", {
       archivePath: archivePathInput.value,
       sourceDir: inspectSourceInput.value || undefined,
-      baselineArchivePath: inspectBaselineInput.value || undefined
+      baselineArchivePath: inspectBaselineInput.value || undefined,
+      entryPath: inspectEntryInput.value || undefined
     });
     renderSummaryCards(inspectSummary, buildInspectSummaryCards(result));
     renderResult(inspectResult, formatInspectResult(result));
@@ -1340,6 +1361,20 @@ function formatInspectResult(result) {
     ""
   ];
 
+  if (result.archiveInsights) {
+    lines.push("Layout:");
+    for (const group of result.archiveInsights.groups) {
+      lines.push("- " + group.label + " (" + group.fileCount + " file(s), " + formatBytesLabel(group.totalBytes) + ")");
+    }
+
+    lines.push("", "Largest files:");
+    for (const entry of result.archiveInsights.largestEntries) {
+      lines.push("- " + entry.path + " (" + formatBytesLabel(entry.size) + ")");
+    }
+
+    lines.push("");
+  }
+
   lines.push("Checks:");
   for (const check of result.trustSummary.checks) {
     lines.push("- " + formatAssessment(check.status) + " " + check.label + ": " + check.detail);
@@ -1426,12 +1461,27 @@ function formatInspectResult(result) {
     }
   }
 
+  if (result.entryPreview) {
+    lines.push(
+      "",
+      "Entry preview",
+      "Entry: " + result.entryPreview.path,
+      "Type: " + (result.entryPreview.text ? "text" : "binary"),
+      "Lines: " + result.entryPreview.lineCount,
+      result.entryPreview.preview
+    );
+  }
+
   if (!result.comparison) {
     lines.push("", "Next step:", "openclaw-skillkit inspect " + result.archivePath + " --source ./path-to-skill");
   }
 
   if (!result.releaseComparison) {
     lines.push("", "Release history:", "openclaw-skillkit inspect " + result.archivePath + " --against ./previous-release.skill");
+  }
+
+  if (!result.entryPreview) {
+    lines.push("", "Archive file preview:", "openclaw-skillkit inspect " + result.archivePath + " --entry SKILL.md");
   }
 
   lines.push("", "Release report:");
@@ -1473,6 +1523,14 @@ function formatReviewResult(result) {
       "Artifact check: " + (result.archive.comparison.matches ? "matches source" : "drift detected"),
       "Matched entries: " + result.archive.comparison.matchedEntries + "/" + result.archive.comparison.entryCount
     );
+
+    if (result.archive.releaseComparison) {
+      lines.push(
+        "Baseline archive: " + result.archive.releaseComparison.baselineArchivePath,
+        "Release delta: " + (result.archive.releaseComparison.matches ? "matches baseline archive" : "release changed"),
+        "Matched baseline entries: " + result.archive.releaseComparison.matchedEntries + "/" + result.archive.releaseComparison.baselineEntryCount
+      );
+    }
   } else {
     lines.push("", "Archive", "Archive not created because blocking lint errors remain.");
   }
@@ -1624,5 +1682,13 @@ function formatAssessment(status) {
   }
 
   return "FAIL";
+}
+
+function formatBytesLabel(size) {
+  if (size < 1024) {
+    return size + " B";
+  }
+
+  return (size / 1024).toFixed(1) + " KB";
 }
 `;
