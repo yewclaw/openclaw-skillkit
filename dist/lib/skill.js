@@ -1,7 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.lintSkill = lintSkill;
-const path = require("node:path");
+const node_path_1 = __importDefault(require("node:path"));
 const promises_1 = require("node:fs/promises");
 const fs_1 = require("./fs");
 const frontmatter_1 = require("./frontmatter");
@@ -32,7 +35,7 @@ const RECOMMENDED_SECTION_HEADINGS = [
 ];
 async function lintSkill(skillDir) {
     const issues = [];
-    const skillFile = path.join(skillDir, "SKILL.md");
+    const skillFile = node_path_1.default.join(skillDir, "SKILL.md");
     if (!(await (0, fs_1.exists)(skillDir))) {
         issues.push(createIssue("error", "missing-directory", ".", `Directory does not exist: ${skillDir}`, {
             category: "filesystem",
@@ -98,11 +101,11 @@ async function lintSkill(skillDir) {
         validateRecommendedSections(sections, issues);
     }
     for (const reference of getReferencedLocalFiles(frontmatterBody)) {
-        const referencePath = path.resolve(skillDir, reference);
-        const relativeReferencePath = path.relative(skillDir, referencePath);
+        const referencePath = node_path_1.default.resolve(skillDir, reference);
+        const relativeReferencePath = node_path_1.default.relative(skillDir, referencePath);
         if (relativeReferencePath === ".." ||
-            relativeReferencePath.startsWith(`..${path.sep}`) ||
-            path.isAbsolute(relativeReferencePath)) {
+            relativeReferencePath.startsWith(`..${node_path_1.default.sep}`) ||
+            node_path_1.default.isAbsolute(relativeReferencePath)) {
             issues.push(createIssue("error", "external-local-reference", "SKILL.md", `Referenced local file escapes the skill root: ${reference}`, {
                 category: "references",
                 suggestion: "Keep local links inside the skill directory so packaging stays self-contained."
@@ -175,7 +178,7 @@ function validateFrontmatter(attributes, issues) {
         }
     }
 }
-function createIssue(level, code, file, message, options = {}) {
+function createIssue(level, code, file, message, options) {
     return {
         level,
         code,
@@ -243,7 +246,7 @@ function getReferencedLocalFiles(markdown) {
     return [...references];
 }
 async function validateScriptExecutables(skillDir, issues) {
-    const scriptsDir = path.join(skillDir, "scripts");
+    const scriptsDir = node_path_1.default.join(skillDir, "scripts");
     if (!(await (0, fs_1.exists)(scriptsDir))) {
         return;
     }
@@ -252,7 +255,7 @@ async function validateScriptExecutables(skillDir, issues) {
         if (!looksLikeRunnableScript(file.relativePath)) {
             continue;
         }
-        const displayPath = path.posix.join("scripts", file.relativePath);
+        const displayPath = node_path_1.default.posix.join("scripts", file.relativePath);
         const fileStat = await (0, promises_1.stat)(file.absolutePath);
         if ((fileStat.mode & 0o111) !== 0) {
             continue;
@@ -264,6 +267,6 @@ async function validateScriptExecutables(skillDir, issues) {
     }
 }
 function looksLikeRunnableScript(relativePath) {
-    const extension = path.extname(relativePath).toLowerCase();
+    const extension = node_path_1.default.extname(relativePath).toLowerCase();
     return extension === ".sh" || extension === ".bash" || extension === ".py" || extension === ".js";
 }

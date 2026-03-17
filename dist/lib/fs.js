@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ensureDir = ensureDir;
 exports.writeTextFile = writeTextFile;
@@ -6,12 +9,12 @@ exports.readTextFile = readTextFile;
 exports.exists = exists;
 exports.listFilesRecursive = listFilesRecursive;
 const promises_1 = require("node:fs/promises");
-const path = require("node:path");
+const node_path_1 = __importDefault(require("node:path"));
 async function ensureDir(dirPath) {
     await (0, promises_1.mkdir)(dirPath, { recursive: true });
 }
 async function writeTextFile(filePath, contents) {
-    await ensureDir(path.dirname(filePath));
+    await ensureDir(node_path_1.default.dirname(filePath));
     await (0, promises_1.writeFile)(filePath, contents, "utf8");
 }
 async function readTextFile(filePath) {
@@ -31,8 +34,8 @@ async function listFilesRecursive(rootDir) {
     async function walk(currentDir, relativeBase) {
         const entries = await (0, promises_1.readdir)(currentDir, { withFileTypes: true });
         for (const entry of entries) {
-            const absolutePath = path.join(currentDir, entry.name);
-            const relativePath = path.posix.join(relativeBase, entry.name);
+            const absolutePath = node_path_1.default.join(currentDir, entry.name);
+            const relativePath = node_path_1.default.posix.join(relativeBase, entry.name);
             if (entry.isDirectory()) {
                 await walk(absolutePath, relativePath);
                 continue;
