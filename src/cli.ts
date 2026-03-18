@@ -127,7 +127,7 @@ async function handlePack(parsed: ReturnType<typeof parseArgs>): Promise<void> {
 }
 
 async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["format", "json", "source", "against", "report", "entry", "all", "baseline-dir"]);
+  assertNoUnexpectedFlags(parsed, ["format", "json", "source", "against", "report", "entry", "all", "baseline-dir", "index"]);
   assertArgumentCount(parsed, 1, "inspect expects exactly 1 archive path.");
 
   const archivePath = parsed.positionals[0];
@@ -152,13 +152,14 @@ async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void
     sourceDir: typeof getFlag(parsed, "source") === "string" ? String(getFlag(parsed, "source")) : undefined,
     baselineArchivePath: typeof getFlag(parsed, "against") === "string" ? String(getFlag(parsed, "against")) : undefined,
     baselineDir: typeof getFlag(parsed, "baseline-dir") === "string" ? String(getFlag(parsed, "baseline-dir")) : undefined,
+    indexPath: parseOptionalPathFlag(parsed, "index"),
     reportPath: parseOptionalPathFlag(parsed, "report"),
     entryPath: typeof getFlag(parsed, "entry") === "string" ? String(getFlag(parsed, "entry")) : undefined
   });
 }
 
 async function handleReview(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["output", "output-dir", "format", "json", "report", "against", "all", "baseline-dir"]);
+  assertNoUnexpectedFlags(parsed, ["output", "output-dir", "format", "json", "report", "against", "all", "baseline-dir", "index"]);
   assertArgumentCount(parsed, 1, "review accepts at most 1 target directory.");
 
   const targetDir = parsed.positionals[0] ?? ".";
@@ -175,6 +176,7 @@ async function handleReview(parsed: ReturnType<typeof parseArgs>): Promise<void>
     outputDir: typeof getFlag(parsed, "output-dir") === "string" ? String(getFlag(parsed, "output-dir")) : undefined,
     format: parseMachineFormat(parsed, "review"),
     reportPath: parseOptionalPathFlag(parsed, "report"),
+    indexPath: parseOptionalPathFlag(parsed, "index"),
     baselineArchivePath: typeof getFlag(parsed, "against") === "string" ? String(getFlag(parsed, "against")) : undefined,
     baselineDir: typeof getFlag(parsed, "baseline-dir") === "string" ? String(getFlag(parsed, "baseline-dir")) : undefined,
     all: batchMode
@@ -283,7 +285,7 @@ Inspect a packaged .skill archive and print the embedded manifest.
 
 Usage:
   skillforge inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./artifacts/customer-support.report.md]] [--json|--format text|json]
-  skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
+  skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--index [./.skillforge/inspect-all.index.json]] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
 
 Examples:
   skillforge inspect ./artifacts/customer-support.skill
@@ -293,7 +295,7 @@ Examples:
   skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
   skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
   skillforge inspect ./released-skills --all
-  skillforge inspect ./released-skills --all --baseline-dir ./previous-releases --report
+  skillforge inspect ./released-skills --all --baseline-dir ./previous-releases --index --report
   skillforge inspect ./artifacts/customer-support.skill --json
 `);
     return;
@@ -306,7 +308,7 @@ Run a release-readiness review for a skill directory.
 
 Usage:
   skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
-  skillforge review [dir] --all [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--report [./reports/review-all.report.md]] [--json|--format text|json]
+  skillforge review [dir] --all [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--index [./artifacts/review-all.index.json]] [--report [./reports/review-all.report.md]] [--json|--format text|json]
 
 Examples:
   skillforge review
@@ -315,7 +317,7 @@ Examples:
   skillforge review skills/customer-support --output ./artifacts/customer-support.skill --report
   skillforge review skills --all
   skillforge review skills --all --output-dir ./artifacts/review
-  skillforge review skills --all --baseline-dir ./released-skills --report
+  skillforge review skills --all --baseline-dir ./released-skills --index --report
   skillforge review skills/customer-support --json
 `);
     return;
@@ -347,8 +349,8 @@ Usage:
   skillforge pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   skillforge pack [dir] --all [--output-dir ./.skillforge/pack-artifacts] [--index [./artifacts/batch-pack.index.json]] [--report [./reports/pack-all.report.md]] [--json|--format text|json]
   skillforge inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
-  skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
-  skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
+  skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--index [./.skillforge/inspect-all.index.json]] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
+  skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--index [./artifacts/review-all.index.json]] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
   skillforge serve [--host 127.0.0.1] [--port 3210]
 
 Help:

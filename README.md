@@ -21,8 +21,8 @@
 | `init` | Generate a consistent skill layout with optional `references/`, `scripts/`, and `assets/`. |
 | `lint` | Catch weak metadata, placeholder copy, missing sections, and broken local references, with `--all` repo-wide validation for multi-skill maintenance. |
 | `pack` | Create a `.skill` archive only after validation passes, with a manifest, repo-wide batch packaging, and optional report or index outputs for inspection and automation. |
-| `inspect` | Read one archive or a whole artifact directory back out, verify contents, preview bundled files, compare against prior releases, and export audit-ready reports. |
-| `review` | Run a release-readiness pass for one skill or a whole repo, package clean artifacts, verify source parity, optionally compare against prior releases, and emit handoff-ready reports. |
+| `inspect` | Read one archive or a whole artifact directory back out, verify contents, preview bundled files, compare against prior releases, and export audit-ready reports or persisted indexes. |
+| `review` | Run a release-readiness pass for one skill or a whole repo, package clean artifacts, verify source parity, optionally compare against prior releases, and emit handoff-ready reports or persisted indexes. |
 | `serve` | Launch SkillForge Studio for demos, examples, linting, packaging, and archive inspection. |
 | `benchmark` | Measure fixture detection quality and CLI round-trip performance with repeatable runs. |
 
@@ -306,7 +306,7 @@ skillforge inspect ./artifacts/customer-support.skill --entry SKILL.md
 skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
 skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
 skillforge inspect ./released-skills --all
-skillforge inspect ./released-skills --all --baseline-dir ./previous-releases --report
+skillforge inspect ./released-skills --all --baseline-dir ./previous-releases --index --report
 skillforge inspect ./artifacts/customer-support.skill --json
 ```
 
@@ -332,6 +332,8 @@ Adding `--entry` previews one bundled file directly from the archive so you can 
 
 Adding `--report` exports the same inspection as a Markdown review artifact that is easier to attach to release notes, share in PRs, or hand to reviewers who do not want raw JSON.
 
+Adding `--index` in batch mode persists the full archive inventory as JSON, including an operations summary with duplicate release coordinates, version spread, changed archives, and missing baselines. That makes `inspect --all` easier to feed into release automation without scraping stdout.
+
 For maintainers auditing a release directory, `inspect --all` walks every `.skill` archive under a root path and produces a repo-scale artifact inventory. That batch view highlights:
 
 - duplicate release coordinates such as the same `name@version` shipped multiple times
@@ -356,7 +358,7 @@ skillforge review skills/customer-support
 skillforge review skills/customer-support --against ./artifacts/customer-support-prev.skill
 skillforge review skills/customer-support --output ./artifacts/customer-support.skill --report
 skillforge review skills --all --output-dir ./artifacts/review
-skillforge review skills --all --baseline-dir ./released-skills --report
+skillforge review skills --all --baseline-dir ./released-skills --index --report
 skillforge review skills/customer-support --json
 ```
 
@@ -370,6 +372,8 @@ That batch review output now also includes maintainer-focused rollups across CLI
 - release hotspots that show which bundled paths and metadata fields changed most often across the repo
 - issue hotspots that surface the most common lint failures without reading every per-skill section
 - baseline coverage reporting that calls out missing baselines and orphaned release artifacts sitting in the baseline directory
+
+When you add `--index` to `review --all`, SkillForge also writes the batch result to JSON next to the review artifacts by default. That saved index includes a compact operations summary listing ready skills, blocked skills, release changes, missing baselines, and any drifted artifacts so CI or handoff scripts can act on the batch result directly.
 
 The result is still one compact scorecard, but it reduces the manual digging that usually happens before repo-wide release handoff.
 

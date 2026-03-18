@@ -518,6 +518,7 @@ serialTest("cli help documents the review workflow", async () => {
   assert.match(result.stdout, /release-readiness review/);
   assert.match(result.stdout, /--all/);
   assert.match(result.stdout, /--baseline-dir \.\/released-skills/);
+  assert.match(result.stdout, /--index \[\.\/artifacts\/review-all\.index\.json\]/);
   assert.match(result.stdout, /my-skill\.review\.md/);
 });
 
@@ -577,6 +578,7 @@ serialTest("cli help documents archive-to-archive inspection", async () => {
   assert.match(result.stdout, /--against \.\/previous\.skill/);
   assert.match(result.stdout, /<archive-dir> --all/);
   assert.match(result.stdout, /--baseline-dir \.\/released-skills/);
+  assert.match(result.stdout, /--index \[\.\/\.skillforge\/inspect-all\.index\.json\]/);
   assert.match(result.stdout, /--entry SKILL\.md/);
   assert.match(result.stdout, /customer-support-prev\.skill/);
 });
@@ -786,6 +788,57 @@ Exercise batch archive inspection against a baseline directory.
   assert.match(report, /## Artifact Inventory/);
 });
 
+serialTest("cli inspect --all can write a persisted index with operations summary", async () => {
+  const tempDir = await makeTempDir("skillforge-inspect-all-index-");
+  const currentDir = path.join(tempDir, "current");
+  const baselineDir = path.join(tempDir, "baseline");
+  const indexPath = path.join(tempDir, "inspect-all.json");
+  const weatherDir = path.join(tempDir, "weather");
+  const alertsDir = path.join(tempDir, "alerts");
+  await copyFixture(path.join("valid", "basic-skill"), weatherDir);
+  await copyFixture(path.join("valid", "basic-skill"), alertsDir);
+  await fs.mkdir(baselineDir, { recursive: true });
+
+  let result = await runCli(["pack", weatherDir, "--output", path.join(baselineDir, "weather-research.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+
+  await fs.appendFile(path.join(weatherDir, "references", "README.md"), "\nChanged after release.\n");
+  await fs.writeFile(
+    path.join(alertsDir, "SKILL.md"),
+    `---
+name: alerts-skill
+description: Batch inspect index should expose practical release operations data.
+version: 1.0.0
+---
+
+# Alerts Skill
+
+## Purpose
+Exercise persisted archive inventory output.
+
+## Workflow
+1. Inspect the release set.
+2. Capture the operations summary for automation.
+`
+  );
+
+  result = await runCli(["pack", weatherDir, "--output", path.join(currentDir, "weather.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+  result = await runCli(["pack", alertsDir, "--output", path.join(currentDir, "alerts.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+
+  result = await runCli(["inspect", currentDir, "--all", "--baseline-dir", baselineDir, "--index", indexPath, "--json"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.indexPath, indexPath);
+  assert.deepEqual(payload.operationsSummary.archivesWithReleaseChanges, ["weather.skill"]);
+  assert.deepEqual(payload.operationsSummary.archivesMissingBaselines, ["alerts.skill"]);
+  const index = JSON.parse(await fs.readFile(indexPath, "utf8"));
+  assert.deepEqual(index.operationsSummary.archivesWithReleaseChanges, ["weather.skill"]);
+  assert.deepEqual(index.operationsSummary.archivesMissingBaselines, ["alerts.skill"]);
+});
+
 serialTest("cli inspect --all rejects single-archive-only flags", async () => {
   const result = await runCli(["inspect", ".", "--all", "--entry", "SKILL.md"]);
 
@@ -973,6 +1026,47 @@ Exercise baseline coverage reporting.
   assert.match(weather.baselineLookup.resolvedArchivePath, /weather-research\.skill$/);
   assert.equal(weather.archive.releaseComparison.matches, false);
   assert.equal(alerts.baselineLookup.resolvedArchivePath, undefined);
+});
+
+serialTest("cli review --all can write a persisted index with operations summary", async () => {
+  const tempDir = await makeTempDir("skillforge-review-all-index-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const baselinesDir = path.join(tempDir, "baselines");
+  const artifactsDir = path.join(tempDir, "artifacts");
+  const indexPath = path.join(tempDir, "review-all.json");
+  const weatherDir = path.join(skillsRoot, "weather");
+  const brokenDir = path.join(skillsRoot, "broken");
+  await copyFixture(path.join("valid", "basic-skill"), weatherDir);
+  await copyFixture(path.join("invalid", "bad-version-skill"), brokenDir);
+  await fs.mkdir(baselinesDir, { recursive: true });
+
+  let result = await runCli(["pack", weatherDir, "--output", path.join(baselinesDir, "weather-research.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+  await fs.appendFile(path.join(weatherDir, "references", "README.md"), "\nChanged after baseline.\n");
+
+  result = await runCli([
+    "review",
+    skillsRoot,
+    "--all",
+    "--output-dir",
+    artifactsDir,
+    "--baseline-dir",
+    baselinesDir,
+    "--index",
+    indexPath,
+    "--json"
+  ]);
+
+  assert.equal(result.code, 1);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.indexPath, indexPath);
+  assert.deepEqual(payload.operationsSummary.readySkills, ["weather"]);
+  assert.deepEqual(payload.operationsSummary.blockedSkills, ["broken"]);
+  assert.deepEqual(payload.operationsSummary.skillsWithReleaseChanges, ["weather"]);
+  assert.deepEqual(payload.operationsSummary.skillsMissingBaselines, ["broken"]);
+  const index = JSON.parse(await fs.readFile(indexPath, "utf8"));
+  assert.deepEqual(index.operationsSummary.readySkills, ["weather"]);
+  assert.deepEqual(index.operationsSummary.blockedSkills, ["broken"]);
 });
 
 serialTest("cli review --all rejects single-skill artifact flags", async () => {

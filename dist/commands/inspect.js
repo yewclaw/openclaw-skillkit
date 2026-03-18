@@ -213,6 +213,7 @@ async function runBatchInspect(rootDir, options) {
     const result = await summarizeBatchInspect(rootDir, options.baselineDir, archives, matchedBaselineArchives);
     const reportPath = await writeBatchInspectReport(result, options.reportPath);
     const reportMarkdown = buildBatchInspectReport(result);
+    const indexPath = await writeBatchInspectIndex(result, options.indexPath);
     if (options.format === "json") {
         console.log(JSON.stringify({
             rootDir: result.rootDir,
@@ -223,7 +224,9 @@ async function runBatchInspect(rootDir, options) {
             identitySummary: result.identitySummary,
             releaseSummary: result.releaseSummary,
             baselineSummary: result.baselineSummary,
+            operationsSummary: result.operationsSummary,
             reportPath,
+            indexPath,
             reportMarkdown,
             archives: result.archives
         }, null, 2));
@@ -282,6 +285,9 @@ async function runBatchInspect(rootDir, options) {
     }
     if (reportPath) {
         console.log(`Report: ${reportPath}`);
+    }
+    if (indexPath) {
+        console.log(`Index: ${indexPath}`);
     }
 }
 async function summarizeBatchInspect(rootDir, baselineDir, archives, matchedBaselineArchives) {
@@ -421,6 +427,18 @@ async function summarizeBatchInspect(rootDir, baselineDir, archives, matchedBase
         baselineSummary: baselineDir
             ? await summarizeBaselineCoverage(node_path_1.default.resolve(baselineDir), archives, matchedBaselineArchives)
             : undefined,
+        operationsSummary: {
+            duplicateReleaseCoordinates: duplicateCoordinates.map((entry) => `${entry.name}@${entry.version}`),
+            skillsWithVersionSpread: multiVersionSkills.map((entry) => `${entry.name}: ${entry.versions.join(", ")}`),
+            archivesWithReleaseChanges: archives
+                .filter((archive) => archive.releaseComparison && !archive.releaseComparison.matches)
+                .map((archive) => archive.relativePath)
+                .sort((left, right) => left.localeCompare(right)),
+            archivesMissingBaselines: archives
+                .filter((archive) => archive.baselineLookup && !archive.baselineLookup.resolvedArchivePath)
+                .map((archive) => archive.relativePath)
+                .sort((left, right) => left.localeCompare(right))
+        },
         archives: archives.sort((left, right) => left.relativePath.localeCompare(right.relativePath))
     };
 }
@@ -639,6 +657,16 @@ async function writeBatchInspectReport(result, reportPath) {
         return undefined;
     }
     await (0, fs_1.writeTextFile)(destination, buildBatchInspectReport(result));
+    return destination;
+}
+async function writeBatchInspectIndex(result, indexPath) {
+    if (typeof indexPath === "undefined" || indexPath === false) {
+        return undefined;
+    }
+    const destination = indexPath === true
+        ? node_path_1.default.join(result.rootDir, ".skillforge", "inspect-all.index.json")
+        : node_path_1.default.resolve(String(indexPath));
+    await (0, fs_1.writeTextFile)(destination, JSON.stringify(result, null, 2));
     return destination;
 }
 async function resolveBatchBaselineArchive(baselineDir, relativePath, name) {

@@ -20,6 +20,7 @@ export interface RunInspectOptions {
   sourceDir?: string;
   baselineArchivePath?: string;
   baselineDir?: string;
+  indexPath?: string | boolean;
   reportPath?: string | boolean;
   entryPath?: string;
 }
@@ -131,6 +132,12 @@ interface BatchInspectResult {
     unchanged: number;
     missingArchives: string[];
     orphanedArchives: string[];
+  };
+  operationsSummary: {
+    duplicateReleaseCoordinates: string[];
+    skillsWithVersionSpread: string[];
+    archivesWithReleaseChanges: string[];
+    archivesMissingBaselines: string[];
   };
   archives: BatchInspectedArchive[];
 }
@@ -412,6 +419,7 @@ async function runBatchInspect(rootDir: string, options: RunInspectOptions): Pro
   const result = await summarizeBatchInspect(rootDir, options.baselineDir, archives, matchedBaselineArchives);
   const reportPath = await writeBatchInspectReport(result, options.reportPath);
   const reportMarkdown = buildBatchInspectReport(result);
+  const indexPath = await writeBatchInspectIndex(result, options.indexPath);
 
   if (options.format === "json") {
     console.log(
@@ -425,7 +433,9 @@ async function runBatchInspect(rootDir: string, options: RunInspectOptions): Pro
           identitySummary: result.identitySummary,
           releaseSummary: result.releaseSummary,
           baselineSummary: result.baselineSummary,
+          operationsSummary: result.operationsSummary,
           reportPath,
+          indexPath,
           reportMarkdown,
           archives: result.archives
         },
@@ -504,6 +514,9 @@ async function runBatchInspect(rootDir: string, options: RunInspectOptions): Pro
 
   if (reportPath) {
     console.log(`Report: ${reportPath}`);
+  }
+  if (indexPath) {
+    console.log(`Index: ${indexPath}`);
   }
 }
 
@@ -659,6 +672,18 @@ async function summarizeBatchInspect(
     baselineSummary: baselineDir
       ? await summarizeBaselineCoverage(path.resolve(baselineDir), archives, matchedBaselineArchives)
       : undefined,
+    operationsSummary: {
+      duplicateReleaseCoordinates: duplicateCoordinates.map((entry) => `${entry.name}@${entry.version}`),
+      skillsWithVersionSpread: multiVersionSkills.map((entry) => `${entry.name}: ${entry.versions.join(", ")}`),
+      archivesWithReleaseChanges: archives
+        .filter((archive) => archive.releaseComparison && !archive.releaseComparison.matches)
+        .map((archive) => archive.relativePath)
+        .sort((left, right) => left.localeCompare(right)),
+      archivesMissingBaselines: archives
+        .filter((archive) => archive.baselineLookup && !archive.baselineLookup.resolvedArchivePath)
+        .map((archive) => archive.relativePath)
+        .sort((left, right) => left.localeCompare(right))
+    },
     archives: archives.sort((left, right) => left.relativePath.localeCompare(right.relativePath))
   };
 }
@@ -903,6 +928,20 @@ async function writeBatchInspectReport(result: BatchInspectResult, reportPath?: 
   }
 
   await writeTextFile(destination, buildBatchInspectReport(result));
+  return destination;
+}
+
+async function writeBatchInspectIndex(result: BatchInspectResult, indexPath?: string | boolean): Promise<string | undefined> {
+  if (typeof indexPath === "undefined" || indexPath === false) {
+    return undefined;
+  }
+
+  const destination =
+    indexPath === true
+      ? path.join(result.rootDir, ".skillforge", "inspect-all.index.json")
+      : path.resolve(String(indexPath));
+
+  await writeTextFile(destination, JSON.stringify(result, null, 2));
   return destination;
 }
 

@@ -4,6 +4,7 @@ export interface RunInspectOptions {
     sourceDir?: string;
     baselineArchivePath?: string;
     baselineDir?: string;
+    indexPath?: string | boolean;
     reportPath?: string | boolean;
     entryPath?: string;
 }

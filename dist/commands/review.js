@@ -135,6 +135,7 @@ async function runBatchReview(rootDir, options) {
     const result = await summarizeBatchReview(rootDir, artifactDir, options.baselineDir, skills);
     const reportPath = await writeBatchReviewReport(result, options.reportPath);
     const reportMarkdown = buildBatchReviewReport(result);
+    const indexPath = await writeBatchReviewIndex(result, options.indexPath);
     if (options.format === "json") {
         console.log(JSON.stringify({
             rootDir: result.rootDir,
@@ -146,7 +147,9 @@ async function runBatchReview(rootDir, options) {
             maintenanceSummary: result.maintenanceSummary,
             releaseHotspots: result.releaseSummary,
             baselineSummary: result.baselineSummary,
+            operationsSummary: result.operationsSummary,
             reportPath,
+            indexPath,
             reportMarkdown,
             skills: result.skills
         }, null, 2));
@@ -221,6 +224,9 @@ async function runBatchReview(rootDir, options) {
     }
     if (reportPath) {
         console.log(`Report: ${reportPath}`);
+    }
+    if (indexPath) {
+        console.log(`Index: ${indexPath}`);
     }
     return result.summary.notReady > 0 ? 1 : 0;
 }
@@ -433,6 +439,32 @@ async function summarizeBatchReview(rootDir, artifactDir, baselineDir, skills) {
         },
         releaseSummary,
         baselineSummary,
+        operationsSummary: {
+            readySkills: skills
+                .filter((skill) => skill.readiness === "ready")
+                .map((skill) => skill.relativeDir)
+                .sort((left, right) => left.localeCompare(right)),
+            readyWithWarningsSkills: skills
+                .filter((skill) => skill.readiness === "ready-with-warnings")
+                .map((skill) => skill.relativeDir)
+                .sort((left, right) => left.localeCompare(right)),
+            blockedSkills: skills
+                .filter((skill) => skill.readiness === "not-ready")
+                .map((skill) => skill.relativeDir)
+                .sort((left, right) => left.localeCompare(right)),
+            skillsWithReleaseChanges: skills
+                .filter((skill) => skill.archive?.releaseComparison && !skill.archive.releaseComparison.matches)
+                .map((skill) => skill.relativeDir)
+                .sort((left, right) => left.localeCompare(right)),
+            skillsMissingBaselines: skills
+                .filter((skill) => skill.baselineLookup && !skill.baselineLookup.resolvedArchivePath)
+                .map((skill) => skill.relativeDir)
+                .sort((left, right) => left.localeCompare(right)),
+            driftedArtifacts: skills
+                .filter((skill) => skill.archive && !skill.archive.comparison.matches)
+                .map((skill) => skill.relativeDir)
+                .sort((left, right) => left.localeCompare(right))
+        },
         skills: skills.sort((left, right) => left.relativeDir.localeCompare(right.relativeDir))
     };
 }
@@ -605,6 +637,16 @@ async function writeBatchReviewReport(result, reportPath) {
         return undefined;
     }
     await (0, fs_1.writeTextFile)(destination, buildBatchReviewReport(result));
+    return destination;
+}
+async function writeBatchReviewIndex(result, indexPath) {
+    if (typeof indexPath === "undefined" || indexPath === false) {
+        return undefined;
+    }
+    const destination = indexPath === true
+        ? node_path_1.default.join(result.artifactDir, "review-all.index.json")
+        : node_path_1.default.resolve(String(indexPath));
+    await (0, fs_1.writeTextFile)(destination, JSON.stringify(result, null, 2));
     return destination;
 }
 async function discoverSkillDirs(rootDir) {

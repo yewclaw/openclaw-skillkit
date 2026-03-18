@@ -3,6 +3,7 @@ export interface RunReviewOptions {
     outputDir?: string;
     format: "text" | "json";
     reportPath?: string | boolean;
+    indexPath?: string | boolean;
     baselineArchivePath?: string;
     baselineDir?: string;
     all?: boolean;
