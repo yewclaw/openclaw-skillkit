@@ -189,7 +189,7 @@ async function handleReview(parsed: ReturnType<typeof parseArgs>): Promise<void>
 }
 
 async function handleIndex(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["format", "json", "list", "plain", "limit"]);
+  assertNoUnexpectedFlags(parsed, ["format", "json", "list", "plain", "limit", "commands"]);
   assertArgumentCount(parsed, 1, "index expects exactly 1 persisted index path.");
 
   const indexPath = parsed.positionals[0];
@@ -213,7 +213,8 @@ async function handleIndex(parsed: ReturnType<typeof parseArgs>): Promise<void> 
     format: parseMachineFormat(parsed, "index"),
     listName: typeof getFlag(parsed, "list") === "string" ? String(getFlag(parsed, "list")) : undefined,
     plain: getFlag(parsed, "plain") === true,
-    limit
+    limit,
+    commands: getFlag(parsed, "commands") === true
   });
 }
 
@@ -362,12 +363,13 @@ Examples:
 Read and query a persisted batch inspect/review index.
 
 Usage:
-  skillforge index <index.json> [--list action-group] [--plain] [--limit 20] [--json|--format text|json]
+  skillforge index <index.json> [--list action-group] [--commands] [--plain] [--limit 20] [--json|--format text|json]
 
 Examples:
   skillforge index ./artifacts/review-all.index.json
   skillforge index ./artifacts/review-all.index.json --list blocked-skills
-  skillforge index ./artifacts/review-all.index.json --list blocked-skills --plain
+  skillforge index ./artifacts/review-all.index.json --list blocked-skills --commands --plain
+  skillforge index ./artifacts/review-all.index.json --commands
   skillforge index ./.skillforge/inspect-all.index.json --list orphaned-baselines --json
 `);
     return;
@@ -401,7 +403,7 @@ Usage:
   skillforge inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--index [./.skillforge/inspect-all.index.json]] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
   skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--index [./artifacts/review-all.index.json]] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
-  skillforge index <index.json> [--list action-group] [--plain] [--limit 20] [--json|--format text|json]
+  skillforge index <index.json> [--list action-group] [--commands] [--plain] [--limit 20] [--json|--format text|json]
   skillforge serve [--host 127.0.0.1] [--port 3210]
 
 Help:

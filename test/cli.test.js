@@ -1121,6 +1121,14 @@ serialTest("cli index can query persisted review indexes for maintenance actions
   assert.equal(payload.summary.status, "NOT READY");
   assert.equal(payload.summary.itemCount, 2);
   assert.equal(payload.availableLists.find((entry) => entry.name === "blocked-skills").count, 1);
+
+  result = await runCli(["index", indexPath, "--list", "release-changes", "--commands", "--plain"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /skillforge inspect .*weather\.skill --against .*weather-research\.skill/);
+
+  result = await runCli(["index", indexPath, "--list", "blocked-skills", "--commands", "--plain"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /skillforge lint .*broken$/);
 });
 
 serialTest("cli index can summarize persisted inspect indexes and list cleanup targets", async () => {
@@ -1176,6 +1184,62 @@ Exercise index-driven inspect maintenance output.
   result = await runCli(["index", indexPath, "--list", "orphaned-baselines", "--plain"]);
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout.trim(), /unused\.skill$/);
+
+  result = await runCli(["index", indexPath, "--list", "orphaned-baselines", "--commands", "--plain"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout.trim(), /rm -f .*unused\.skill$/);
+});
+
+serialTest("cli index can emit baseline promotion commands for missing baselines", async () => {
+  const tempDir = await makeTempDir("skillforge-index-promote-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const reviewArtifactsDir = path.join(tempDir, "review-artifacts");
+  const reviewBaselineDir = path.join(tempDir, "review-baselines");
+  const reviewIndexPath = path.join(tempDir, "review-all.json");
+  const inspectCurrentDir = path.join(tempDir, "inspect-current");
+  const inspectBaselineDir = path.join(tempDir, "inspect-baselines");
+  const inspectIndexPath = path.join(tempDir, "inspect-all.json");
+  const weatherDir = path.join(skillsRoot, "weather");
+
+  await copyFixture(path.join("valid", "basic-skill"), weatherDir);
+  await fs.mkdir(reviewBaselineDir, { recursive: true });
+  await fs.mkdir(inspectBaselineDir, { recursive: true });
+
+  let result = await runCli([
+    "review",
+    skillsRoot,
+    "--all",
+    "--output-dir",
+    reviewArtifactsDir,
+    "--baseline-dir",
+    reviewBaselineDir,
+    "--index",
+    reviewIndexPath,
+    "--json"
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+
+  result = await runCli(["index", reviewIndexPath, "--list", "missing-baselines", "--commands", "--plain"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /cp .*weather\.skill .*review-baselines.*weather\.skill/);
+
+  result = await runCli(["pack", weatherDir, "--output", path.join(inspectCurrentDir, "weather.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+  result = await runCli([
+    "inspect",
+    inspectCurrentDir,
+    "--all",
+    "--baseline-dir",
+    inspectBaselineDir,
+    "--index",
+    inspectIndexPath,
+    "--json"
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+
+  result = await runCli(["index", inspectIndexPath, "--list", "missing-baselines", "--commands", "--plain"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /cp .*inspect-current\/weather\.skill .*inspect-baselines\/weather\.skill/);
 });
 
 serialTest("cli review --all rejects single-skill artifact flags", async () => {

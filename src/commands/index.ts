@@ -6,6 +6,7 @@ export interface RunIndexOptions {
   listName?: string;
   plain?: boolean;
   limit?: number;
+  commands?: boolean;
 }
 
 type IndexType = "review" | "inspect";
@@ -46,6 +47,22 @@ interface ReviewIndexShape {
     skillsMissingBaselines: string[];
     driftedArtifacts: string[];
   };
+  skills?: Array<{
+    skillDir: string;
+    relativeDir: string;
+    name?: string;
+    readiness: "ready" | "ready-with-warnings" | "not-ready";
+    archive?: {
+      destination: string;
+      releaseComparison?: {
+        baselineArchivePath: string;
+      };
+    };
+    baselineLookup?: {
+      requestedDir: string;
+      resolvedArchivePath?: string;
+    };
+  }>;
 }
 
 interface InspectIndexShape {
@@ -65,6 +82,32 @@ interface InspectIndexShape {
     skillsWithVersionSpread: string[];
     archivesWithReleaseChanges: string[];
     archivesMissingBaselines: string[];
+  };
+  archives?: Array<{
+    archivePath: string;
+    relativePath: string;
+    skill: {
+      name: string;
+      version: string;
+    };
+    baselineLookup?: {
+      requestedDir: string;
+      resolvedArchivePath?: string;
+    };
+    releaseComparison?: {
+      baselineArchivePath: string;
+    };
+  }>;
+  identitySummary?: {
+    duplicateCoordinates: Array<{
+      name: string;
+      version: string;
+      archives: string[];
+    }>;
+    multiVersionSkills: Array<{
+      name: string;
+      archives: string[];
+    }>;
   };
 }
 
@@ -100,7 +143,12 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
     detectedType === "review"
       ? buildReviewActionGroups(payload as ReviewIndexShape)
       : buildInspectActionGroups(payload as InspectIndexShape);
+  const commandGroups =
+    detectedType === "review"
+      ? buildReviewCommandGroups(payload as ReviewIndexShape)
+      : buildInspectCommandGroups(payload as InspectIndexShape);
   const selectedGroup = selectActionGroup(actionGroups, options.listName);
+  const selectedCommands = selectedGroup ? commandGroups.get(selectedGroup.name) ?? [] : [];
 
   if (options.format === "json") {
     console.log(
@@ -115,6 +163,18 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
             description: group.description,
             count: group.items.length
           })),
+          recommendedCommands:
+            options.commands && !selectedGroup
+              ? actionGroups
+                  .map((group) => ({
+                    name: group.name,
+                    label: group.label,
+                    count: (commandGroups.get(group.name) ?? []).length,
+                    commands: (commandGroups.get(group.name) ?? []).slice(0, limit),
+                    truncated: (commandGroups.get(group.name) ?? []).length > limit
+                  }))
+                  .filter((group) => group.count > 0)
+              : undefined,
           selectedList: selectedGroup
             ? {
                 name: selectedGroup.name,
@@ -122,7 +182,9 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
                 description: selectedGroup.description,
                 count: selectedGroup.items.length,
                 items: selectedGroup.items.slice(0, limit),
-                truncated: selectedGroup.items.length > limit
+                truncated: selectedGroup.items.length > limit,
+                commands: options.commands ? selectedCommands.slice(0, limit) : undefined,
+                commandsTruncated: options.commands ? selectedCommands.length > limit : undefined
               }
             : undefined
         },
@@ -134,7 +196,8 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
   }
 
   if (selectedGroup && options.plain) {
-    for (const item of selectedGroup.items.slice(0, limit)) {
+    const plainValues = options.commands ? selectedCommands : selectedGroup.items;
+    for (const item of plainValues.slice(0, limit)) {
       console.log(item);
     }
     return;
@@ -155,6 +218,9 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
 
   if (selectedGroup) {
     printActionGroup(selectedGroup, limit);
+    if (options.commands) {
+      printCommandGroup(selectedCommands, limit);
+    }
     return;
   }
 
@@ -170,6 +236,27 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
     const suffix = group.items.length > preview.length ? ` (+${group.items.length - preview.length} more)` : "";
     console.log(`  ${group.name} (${group.items.length}): ${preview.join(", ")}${suffix}`);
   }
+
+  if (options.commands) {
+    const commandGroupsToPrint = actionGroups
+      .map((group) => ({
+        name: group.name,
+        commands: commandGroups.get(group.name) ?? []
+      }))
+      .filter((group) => group.commands.length > 0)
+      .slice(0, 5);
+    if (commandGroupsToPrint.length === 0) {
+      console.log("Commands: no follow-up commands available from this index.");
+      return;
+    }
+
+    console.log("Commands:");
+    for (const group of commandGroupsToPrint) {
+      const preview = group.commands.slice(0, Math.min(limit, 3));
+      const suffix = group.commands.length > preview.length ? ` (+${group.commands.length - preview.length} more)` : "";
+      console.log(`  ${group.name}: ${preview.join(" | ")}${suffix}`);
+    }
+  }
 }
 
 function printActionGroup(group: ActionGroup, limit: number): void {
@@ -184,6 +271,21 @@ function printActionGroup(group: ActionGroup, limit: number): void {
   }
   if (group.items.length > limit) {
     console.log(`  ... ${group.items.length - limit} more`);
+  }
+}
+
+function printCommandGroup(commands: string[], limit: number): void {
+  console.log(`Commands: ${commands.length}`);
+  if (commands.length === 0) {
+    console.log("  none");
+    return;
+  }
+
+  for (const command of commands.slice(0, limit)) {
+    console.log(`  - ${command}`);
+  }
+  if (commands.length > limit) {
+    console.log(`  ... ${commands.length - limit} more`);
   }
 }
 
@@ -363,6 +465,177 @@ function buildInspectActionGroups(index: InspectIndexShape): ActionGroup[] {
       items: sortStrings(index.baselineSummary?.orphanedArchives ?? [])
     }
   ];
+}
+
+function buildReviewCommandGroups(index: ReviewIndexShape): Map<string, string[]> {
+  const skills = index.skills ?? [];
+  const byRelativeDir = new Map(skills.map((skill) => [skill.relativeDir, skill] as const));
+
+  return new Map<string, string[]>([
+    [
+      "blocked-skills",
+      buildUniqueCommands(
+        index.operationsSummary.blockedSkills.map((relativeDir) => {
+          const skill = byRelativeDir.get(relativeDir);
+          return skill ? `skillforge lint ${shellQuote(skill.skillDir)}` : undefined;
+        })
+      )
+    ],
+    [
+      "ready-with-warnings",
+      buildUniqueCommands(
+        index.operationsSummary.readyWithWarningsSkills.map((relativeDir) => {
+          const skill = byRelativeDir.get(relativeDir);
+          if (!skill) {
+            return undefined;
+          }
+          if (skill.archive?.destination) {
+            return `skillforge review ${shellQuote(skill.skillDir)} --output ${shellQuote(skill.archive.destination)}`;
+          }
+          return `skillforge lint ${shellQuote(skill.skillDir)}`;
+        })
+      )
+    ],
+    [
+      "ready-skills",
+      buildUniqueCommands(
+        index.operationsSummary.readySkills.map((relativeDir) => {
+          const skill = byRelativeDir.get(relativeDir);
+          if (!skill?.archive?.destination) {
+            return undefined;
+          }
+          return `skillforge inspect ${shellQuote(skill.archive.destination)}`;
+        })
+      )
+    ],
+    [
+      "release-changes",
+      buildUniqueCommands(
+        index.operationsSummary.skillsWithReleaseChanges.map((relativeDir) => {
+          const skill = byRelativeDir.get(relativeDir);
+          if (!skill?.archive?.destination || !skill.archive.releaseComparison?.baselineArchivePath) {
+            return undefined;
+          }
+          return `skillforge inspect ${shellQuote(skill.archive.destination)} --against ${shellQuote(skill.archive.releaseComparison.baselineArchivePath)}`;
+        })
+      )
+    ],
+    [
+      "missing-baselines",
+      buildUniqueCommands(
+        index.operationsSummary.skillsMissingBaselines.map((relativeDir) => {
+          const skill = byRelativeDir.get(relativeDir);
+          const baselinePath = skill ? resolveReviewBaselinePromotionPath(skill) : undefined;
+          if (!skill?.archive?.destination || !baselinePath) {
+            return undefined;
+          }
+          return `cp ${shellQuote(skill.archive.destination)} ${shellQuote(baselinePath)}`;
+        })
+      )
+    ],
+    [
+      "drifted-artifacts",
+      buildUniqueCommands(
+        index.operationsSummary.driftedArtifacts.map((relativeDir) => {
+          const skill = byRelativeDir.get(relativeDir);
+          if (!skill) {
+            return undefined;
+          }
+          if (skill.archive?.destination) {
+            return `skillforge review ${shellQuote(skill.skillDir)} --output ${shellQuote(skill.archive.destination)}`;
+          }
+          return `skillforge review ${shellQuote(skill.skillDir)}`;
+        })
+      )
+    ],
+    [
+      "orphaned-baselines",
+      buildUniqueCommands(
+        (index.baselineSummary?.orphanedArchives ?? []).map((archivePath) => `rm -f ${shellQuote(archivePath)}`)
+      )
+    ]
+  ]);
+}
+
+function buildInspectCommandGroups(index: InspectIndexShape): Map<string, string[]> {
+  const archives = index.archives ?? [];
+  const byRelativePath = new Map(archives.map((archive) => [archive.relativePath, archive] as const));
+  const duplicateCommands = (index.identitySummary?.duplicateCoordinates ?? []).flatMap((entry) =>
+    entry.archives.map((archivePath) => `skillforge inspect ${shellQuote(archivePath)}`)
+  );
+  const versionSpreadCommands = (index.identitySummary?.multiVersionSkills ?? []).flatMap((entry) =>
+    entry.archives.map((archivePath) => `skillforge inspect ${shellQuote(archivePath)}`)
+  );
+
+  return new Map<string, string[]>([
+    [
+      "release-changes",
+      buildUniqueCommands(
+        index.operationsSummary.archivesWithReleaseChanges.map((relativePath) => {
+          const archive = byRelativePath.get(relativePath);
+          if (!archive?.releaseComparison?.baselineArchivePath) {
+            return undefined;
+          }
+          return `skillforge inspect ${shellQuote(archive.archivePath)} --against ${shellQuote(archive.releaseComparison.baselineArchivePath)}`;
+        })
+      )
+    ],
+    [
+      "missing-baselines",
+      buildUniqueCommands(
+        index.operationsSummary.archivesMissingBaselines.map((relativePath) => {
+          const archive = byRelativePath.get(relativePath);
+          const baselinePath = archive ? resolveInspectBaselinePromotionPath(archive) : undefined;
+          if (!archive || !baselinePath) {
+            return undefined;
+          }
+          return `cp ${shellQuote(archive.archivePath)} ${shellQuote(baselinePath)}`;
+        })
+      )
+    ],
+    ["duplicate-release-coordinates", buildUniqueCommands(duplicateCommands)],
+    ["version-spread", buildUniqueCommands(versionSpreadCommands)],
+    [
+      "orphaned-baselines",
+      buildUniqueCommands(
+        (index.baselineSummary?.orphanedArchives ?? []).map((archivePath) => `rm -f ${shellQuote(archivePath)}`)
+      )
+    ]
+  ]);
+}
+
+function resolveReviewBaselinePromotionPath(skill: NonNullable<ReviewIndexShape["skills"]>[number]): string | undefined {
+  const requestedDir = skill.baselineLookup?.requestedDir;
+  if (!requestedDir) {
+    return undefined;
+  }
+
+  const relativeName = skill.relativeDir === "." ? "root.skill" : `${skill.relativeDir}.skill`;
+  return path.join(requestedDir, relativeName);
+}
+
+function resolveInspectBaselinePromotionPath(
+  archive: NonNullable<InspectIndexShape["archives"]>[number]
+): string | undefined {
+  const requestedDir = archive.baselineLookup?.requestedDir;
+  if (!requestedDir) {
+    return undefined;
+  }
+
+  const relativeName = archive.relativePath === "." ? "root.skill" : archive.relativePath;
+  return path.join(requestedDir, relativeName);
+}
+
+function buildUniqueCommands(commands: Array<string | undefined>): string[] {
+  return [...new Set(commands.filter((command): command is string => Boolean(command)))];
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:-]+$/.test(value)) {
+    return value;
+  }
+
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 function sortStrings(values: string[]): string[] {

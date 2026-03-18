@@ -20,7 +20,11 @@ async function runIndex(indexPath, options) {
     const actionGroups = detectedType === "review"
         ? buildReviewActionGroups(payload)
         : buildInspectActionGroups(payload);
+    const commandGroups = detectedType === "review"
+        ? buildReviewCommandGroups(payload)
+        : buildInspectCommandGroups(payload);
     const selectedGroup = selectActionGroup(actionGroups, options.listName);
+    const selectedCommands = selectedGroup ? commandGroups.get(selectedGroup.name) ?? [] : [];
     if (options.format === "json") {
         console.log(JSON.stringify({
             indexPath: resolvedIndexPath,
@@ -32,6 +36,17 @@ async function runIndex(indexPath, options) {
                 description: group.description,
                 count: group.items.length
             })),
+            recommendedCommands: options.commands && !selectedGroup
+                ? actionGroups
+                    .map((group) => ({
+                    name: group.name,
+                    label: group.label,
+                    count: (commandGroups.get(group.name) ?? []).length,
+                    commands: (commandGroups.get(group.name) ?? []).slice(0, limit),
+                    truncated: (commandGroups.get(group.name) ?? []).length > limit
+                }))
+                    .filter((group) => group.count > 0)
+                : undefined,
             selectedList: selectedGroup
                 ? {
                     name: selectedGroup.name,
@@ -39,14 +54,17 @@ async function runIndex(indexPath, options) {
                     description: selectedGroup.description,
                     count: selectedGroup.items.length,
                     items: selectedGroup.items.slice(0, limit),
-                    truncated: selectedGroup.items.length > limit
+                    truncated: selectedGroup.items.length > limit,
+                    commands: options.commands ? selectedCommands.slice(0, limit) : undefined,
+                    commandsTruncated: options.commands ? selectedCommands.length > limit : undefined
                 }
                 : undefined
         }, null, 2));
         return;
     }
     if (selectedGroup && options.plain) {
-        for (const item of selectedGroup.items.slice(0, limit)) {
+        const plainValues = options.commands ? selectedCommands : selectedGroup.items;
+        for (const item of plainValues.slice(0, limit)) {
             console.log(item);
         }
         return;
@@ -65,6 +83,9 @@ async function runIndex(indexPath, options) {
     }
     if (selectedGroup) {
         printActionGroup(selectedGroup, limit);
+        if (options.commands) {
+            printCommandGroup(selectedCommands, limit);
+        }
         return;
     }
     const groupsToPrint = actionGroups.filter((group) => group.items.length > 0).slice(0, 5);
@@ -78,6 +99,25 @@ async function runIndex(indexPath, options) {
         const suffix = group.items.length > preview.length ? ` (+${group.items.length - preview.length} more)` : "";
         console.log(`  ${group.name} (${group.items.length}): ${preview.join(", ")}${suffix}`);
     }
+    if (options.commands) {
+        const commandGroupsToPrint = actionGroups
+            .map((group) => ({
+            name: group.name,
+            commands: commandGroups.get(group.name) ?? []
+        }))
+            .filter((group) => group.commands.length > 0)
+            .slice(0, 5);
+        if (commandGroupsToPrint.length === 0) {
+            console.log("Commands: no follow-up commands available from this index.");
+            return;
+        }
+        console.log("Commands:");
+        for (const group of commandGroupsToPrint) {
+            const preview = group.commands.slice(0, Math.min(limit, 3));
+            const suffix = group.commands.length > preview.length ? ` (+${group.commands.length - preview.length} more)` : "";
+            console.log(`  ${group.name}: ${preview.join(" | ")}${suffix}`);
+        }
+    }
 }
 function printActionGroup(group, limit) {
     console.log(`${group.label}: ${group.items.length}`);
@@ -90,6 +130,19 @@ function printActionGroup(group, limit) {
     }
     if (group.items.length > limit) {
         console.log(`  ... ${group.items.length - limit} more`);
+    }
+}
+function printCommandGroup(commands, limit) {
+    console.log(`Commands: ${commands.length}`);
+    if (commands.length === 0) {
+        console.log("  none");
+        return;
+    }
+    for (const command of commands.slice(0, limit)) {
+        console.log(`  - ${command}`);
+    }
+    if (commands.length > limit) {
+        console.log(`  ... ${commands.length - limit} more`);
     }
 }
 function selectActionGroup(groups, listName) {
@@ -252,6 +305,140 @@ function buildInspectActionGroups(index) {
             items: sortStrings(index.baselineSummary?.orphanedArchives ?? [])
         }
     ];
+}
+function buildReviewCommandGroups(index) {
+    const skills = index.skills ?? [];
+    const byRelativeDir = new Map(skills.map((skill) => [skill.relativeDir, skill]));
+    return new Map([
+        [
+            "blocked-skills",
+            buildUniqueCommands(index.operationsSummary.blockedSkills.map((relativeDir) => {
+                const skill = byRelativeDir.get(relativeDir);
+                return skill ? `skillforge lint ${shellQuote(skill.skillDir)}` : undefined;
+            }))
+        ],
+        [
+            "ready-with-warnings",
+            buildUniqueCommands(index.operationsSummary.readyWithWarningsSkills.map((relativeDir) => {
+                const skill = byRelativeDir.get(relativeDir);
+                if (!skill) {
+                    return undefined;
+                }
+                if (skill.archive?.destination) {
+                    return `skillforge review ${shellQuote(skill.skillDir)} --output ${shellQuote(skill.archive.destination)}`;
+                }
+                return `skillforge lint ${shellQuote(skill.skillDir)}`;
+            }))
+        ],
+        [
+            "ready-skills",
+            buildUniqueCommands(index.operationsSummary.readySkills.map((relativeDir) => {
+                const skill = byRelativeDir.get(relativeDir);
+                if (!skill?.archive?.destination) {
+                    return undefined;
+                }
+                return `skillforge inspect ${shellQuote(skill.archive.destination)}`;
+            }))
+        ],
+        [
+            "release-changes",
+            buildUniqueCommands(index.operationsSummary.skillsWithReleaseChanges.map((relativeDir) => {
+                const skill = byRelativeDir.get(relativeDir);
+                if (!skill?.archive?.destination || !skill.archive.releaseComparison?.baselineArchivePath) {
+                    return undefined;
+                }
+                return `skillforge inspect ${shellQuote(skill.archive.destination)} --against ${shellQuote(skill.archive.releaseComparison.baselineArchivePath)}`;
+            }))
+        ],
+        [
+            "missing-baselines",
+            buildUniqueCommands(index.operationsSummary.skillsMissingBaselines.map((relativeDir) => {
+                const skill = byRelativeDir.get(relativeDir);
+                const baselinePath = skill ? resolveReviewBaselinePromotionPath(skill) : undefined;
+                if (!skill?.archive?.destination || !baselinePath) {
+                    return undefined;
+                }
+                return `cp ${shellQuote(skill.archive.destination)} ${shellQuote(baselinePath)}`;
+            }))
+        ],
+        [
+            "drifted-artifacts",
+            buildUniqueCommands(index.operationsSummary.driftedArtifacts.map((relativeDir) => {
+                const skill = byRelativeDir.get(relativeDir);
+                if (!skill) {
+                    return undefined;
+                }
+                if (skill.archive?.destination) {
+                    return `skillforge review ${shellQuote(skill.skillDir)} --output ${shellQuote(skill.archive.destination)}`;
+                }
+                return `skillforge review ${shellQuote(skill.skillDir)}`;
+            }))
+        ],
+        [
+            "orphaned-baselines",
+            buildUniqueCommands((index.baselineSummary?.orphanedArchives ?? []).map((archivePath) => `rm -f ${shellQuote(archivePath)}`))
+        ]
+    ]);
+}
+function buildInspectCommandGroups(index) {
+    const archives = index.archives ?? [];
+    const byRelativePath = new Map(archives.map((archive) => [archive.relativePath, archive]));
+    const duplicateCommands = (index.identitySummary?.duplicateCoordinates ?? []).flatMap((entry) => entry.archives.map((archivePath) => `skillforge inspect ${shellQuote(archivePath)}`));
+    const versionSpreadCommands = (index.identitySummary?.multiVersionSkills ?? []).flatMap((entry) => entry.archives.map((archivePath) => `skillforge inspect ${shellQuote(archivePath)}`));
+    return new Map([
+        [
+            "release-changes",
+            buildUniqueCommands(index.operationsSummary.archivesWithReleaseChanges.map((relativePath) => {
+                const archive = byRelativePath.get(relativePath);
+                if (!archive?.releaseComparison?.baselineArchivePath) {
+                    return undefined;
+                }
+                return `skillforge inspect ${shellQuote(archive.archivePath)} --against ${shellQuote(archive.releaseComparison.baselineArchivePath)}`;
+            }))
+        ],
+        [
+            "missing-baselines",
+            buildUniqueCommands(index.operationsSummary.archivesMissingBaselines.map((relativePath) => {
+                const archive = byRelativePath.get(relativePath);
+                const baselinePath = archive ? resolveInspectBaselinePromotionPath(archive) : undefined;
+                if (!archive || !baselinePath) {
+                    return undefined;
+                }
+                return `cp ${shellQuote(archive.archivePath)} ${shellQuote(baselinePath)}`;
+            }))
+        ],
+        ["duplicate-release-coordinates", buildUniqueCommands(duplicateCommands)],
+        ["version-spread", buildUniqueCommands(versionSpreadCommands)],
+        [
+            "orphaned-baselines",
+            buildUniqueCommands((index.baselineSummary?.orphanedArchives ?? []).map((archivePath) => `rm -f ${shellQuote(archivePath)}`))
+        ]
+    ]);
+}
+function resolveReviewBaselinePromotionPath(skill) {
+    const requestedDir = skill.baselineLookup?.requestedDir;
+    if (!requestedDir) {
+        return undefined;
+    }
+    const relativeName = skill.relativeDir === "." ? "root.skill" : `${skill.relativeDir}.skill`;
+    return node_path_1.default.join(requestedDir, relativeName);
+}
+function resolveInspectBaselinePromotionPath(archive) {
+    const requestedDir = archive.baselineLookup?.requestedDir;
+    if (!requestedDir) {
+        return undefined;
+    }
+    const relativeName = archive.relativePath === "." ? "root.skill" : archive.relativePath;
+    return node_path_1.default.join(requestedDir, relativeName);
+}
+function buildUniqueCommands(commands) {
+    return [...new Set(commands.filter((command) => Boolean(command)))];
+}
+function shellQuote(value) {
+    if (/^[A-Za-z0-9_./:-]+$/.test(value)) {
+        return value;
+    }
+    return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 function sortStrings(values) {
     return values.slice().sort((left, right) => left.localeCompare(right));
