@@ -26,7 +26,7 @@ async function runServe(options) {
     };
     process.once("SIGINT", shutdown);
     process.once("SIGTERM", shutdown);
-    console.log(`OpenClaw Skill Studio running at ${handle.url}`);
+    console.log(`SkillForge Studio running at ${handle.url}`);
     console.log("Press Ctrl+C to stop.");
     return handle;
 }
@@ -235,7 +235,7 @@ const HTML_PAGE = String.raw `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>OpenClaw Skill Studio</title>
+    <title>SkillForge Studio</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -243,10 +243,10 @@ const HTML_PAGE = String.raw `<!doctype html>
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Official Workflow</p>
-          <h1>OpenClaw Skill Studio</h1>
+          <h1>SkillForge Studio</h1>
           <p class="subtitle">
-            The local authoring surface for OpenClaw skills. Start from a real scaffold, validate the skill, package
-            it, and inspect the final artifact before you share it.
+            The local authoring surface for skill authoring, validation, packaging, and review. Start from a real
+            scaffold, validate the skill, package it, and inspect the final artifact before you share it.
           </p>
           <div class="hero-actions">
             <span class="hero-badge">Runs fully local</span>
@@ -1268,8 +1268,8 @@ function formatPackResult(result) {
   }
 
   lines.push("", "Next steps:");
-  lines.push("1. Inspect the artifact: openclaw-skillkit inspect " + result.archivePath);
-  lines.push("2. Check source parity: openclaw-skillkit inspect " + result.archivePath + " --source ./path-to-skill");
+  lines.push("1. Inspect the artifact: skillforge inspect " + result.archivePath);
+  lines.push("2. Check source parity: skillforge inspect " + result.archivePath + " --source ./path-to-skill");
   lines.push("", "Release report:");
   lines.push(result.reportMarkdown);
 
@@ -1404,15 +1404,15 @@ function formatInspectResult(result) {
   }
 
   if (!result.comparison) {
-    lines.push("", "Next step:", "openclaw-skillkit inspect " + result.archivePath + " --source ./path-to-skill");
+    lines.push("", "Next step:", "skillforge inspect " + result.archivePath + " --source ./path-to-skill");
   }
 
   if (!result.releaseComparison) {
-    lines.push("", "Release history:", "openclaw-skillkit inspect " + result.archivePath + " --against ./previous-release.skill");
+    lines.push("", "Release history:", "skillforge inspect " + result.archivePath + " --against ./previous-release.skill");
   }
 
   if (!result.entryPreview) {
-    lines.push("", "Archive file preview:", "openclaw-skillkit inspect " + result.archivePath + " --entry SKILL.md");
+    lines.push("", "Archive file preview:", "skillforge inspect " + result.archivePath + " --entry SKILL.md");
   }
 
   lines.push("", "Release report:");

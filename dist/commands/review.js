@@ -59,7 +59,7 @@ async function runBatchReview(rootDir, options) {
                         code: "no-skills-found",
                         file: ".",
                         message: "No skills were found under the target directory.",
-                        suggestion: 'Run "openclaw-skillkit init <dir>" to scaffold a skill, or point review at the repo containing skills.'
+                        suggestion: 'Run "skillforge init <dir>" to scaffold a skill, or point review at the repo containing skills.'
                     }
                 ]
             }, null, 2));
@@ -70,12 +70,12 @@ async function runBatchReview(rootDir, options) {
         console.log("Summary: no skill directories were found.");
         console.log("Next:");
         console.log("  1. Add at least one skill directory containing SKILL.md.");
-        console.log(`  2. Re-run: openclaw-skillkit review ${rootDir} --all`);
+        console.log(`  2. Re-run: skillforge review ${rootDir} --all`);
         return 1;
     }
     const artifactDir = options.outputDir
         ? node_path_1.default.resolve(options.outputDir)
-        : node_path_1.default.join(rootDir, ".openclaw-skillkit", "review-artifacts", `${Date.now()}`);
+        : node_path_1.default.join(rootDir, ".skillforge", "review-artifacts", `${Date.now()}`);
     const skills = [];
     for (const skillDir of skillDirs) {
         const relativeDir = node_path_1.default.relative(rootDir, skillDir) || ".";
@@ -438,7 +438,7 @@ async function summarizeBatchReview(rootDir, artifactDir, baselineDir, skills) {
 }
 function buildBatchReviewReport(result) {
     const lines = [];
-    lines.push("# OpenClaw Skill Batch Review Report");
+    lines.push("# SkillForge Batch Review Report");
     lines.push("");
     lines.push(`- Root: \`${result.rootDir}\``);
     lines.push(`- Artifact directory: \`${result.artifactDir}\``);
@@ -597,7 +597,7 @@ async function writeBatchReviewReport(result, reportPath) {
         return undefined;
     }
     const destination = reportPath === true
-        ? node_path_1.default.join(result.rootDir, ".openclaw-skillkit", "review-all.report.md")
+        ? node_path_1.default.join(result.rootDir, ".skillforge", "review-all.report.md")
         : typeof reportPath === "string"
             ? node_path_1.default.resolve(reportPath)
             : undefined;
@@ -609,7 +609,7 @@ async function writeBatchReviewReport(result, reportPath) {
 }
 async function discoverSkillDirs(rootDir) {
     const results = [];
-    const ignored = new Set([".git", "node_modules", "dist", ".openclaw-skillkit"]);
+    const ignored = new Set([".git", "node_modules", "dist", ".skillforge"]);
     async function walk(currentDir) {
         const entries = await (0, promises_1.readdir)(currentDir, { withFileTypes: true });
         if (entries.some((entry) => entry.isFile() && entry.name === "SKILL.md")) {

@@ -1,7 +1,7 @@
-Build the first MVP of openclaw-skillkit in this repository.
+Build the first MVP of skillforge in this repository.
 
 Project goal:
-- A public open-source toolkit to help developers build, lint, and pack OpenClaw skills.
+- A public open-source toolkit to help developers author, lint, package, and review reusable skills.
 - Optimize for fast adoption and clarity. This should feel shippable and easy to star.
 
 Requirements:
@@ -26,4 +26,4 @@ Constraints:
 - At the end, print a concise summary with run instructions.
 
 When completely finished, run this command to notify me:
-openclaw system event --text "Done: Codex built openclaw-skillkit MVP and committed it" --mode now
+openclaw system event --text "Done: Codex built skillforge MVP and committed it" --mode now

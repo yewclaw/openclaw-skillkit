@@ -14,7 +14,7 @@ const promises_2 = require("node:fs/promises");
 const fs_1 = require("./fs");
 const frontmatter_1 = require("./frontmatter");
 const crcTable = createCrcTable();
-const PACK_MANIFEST_PATH = ".openclaw-skillkit/manifest.json";
+const PACK_MANIFEST_PATH = ".skillforge/manifest.json";
 async function createSkillArchive(sourceDir, destinationFile) {
     const files = (await (0, fs_1.listFilesRecursive)(sourceDir))
         .filter((file) => !file.relativePath.endsWith(".skill"))

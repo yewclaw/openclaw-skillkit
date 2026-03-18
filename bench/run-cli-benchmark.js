@@ -54,7 +54,7 @@ function runCommand(args) {
 }
 
 async function runRoundTrip(index) {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `openclaw-bench-${index}-`));
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `skillforge-bench-${index}-`));
   const skillDir = path.join(tempDir, "bench-skill");
   const archivePath = path.join(tempDir, "bench-skill.skill");
   const startedAt = process.hrtime.bigint();

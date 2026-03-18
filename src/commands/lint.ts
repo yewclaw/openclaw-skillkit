@@ -42,8 +42,8 @@ export async function runLint(targetDir: string, options: RunLintOptions): Promi
   if (summary.total === 0) {
     console.log("  Confidence: no blocking issues or warnings were found.");
     console.log("Next:");
-    console.log(`  1. Pack when ready: openclaw-skillkit pack ${resolved}`);
-    console.log(`  2. Run a full review before handoff: openclaw-skillkit review ${resolved}`);
+    console.log(`  1. Pack when ready: skillforge pack ${resolved}`);
+    console.log(`  2. Run a full review before handoff: skillforge review ${resolved}`);
     return 0;
   }
 
@@ -130,7 +130,7 @@ async function runBatchLint(rootDir: string, options: RunLintOptions): Promise<n
                 code: "no-skills-found",
                 file: ".",
                 message: "No skills were found under the target directory.",
-                suggestion: 'Run "openclaw-skillkit init <dir>" to scaffold a skill, or point lint at the repo containing skills.'
+                suggestion: 'Run "skillforge init <dir>" to scaffold a skill, or point lint at the repo containing skills.'
               }
             ]
           },
@@ -146,7 +146,7 @@ async function runBatchLint(rootDir: string, options: RunLintOptions): Promise<n
     console.log("Summary: no skill directories were found.");
     console.log("Next:");
     console.log("  1. Add at least one skill directory containing SKILL.md.");
-    console.log(`  2. Re-run: openclaw-skillkit lint ${rootDir} --all`);
+    console.log(`  2. Re-run: skillforge lint ${rootDir} --all`);
     return 1;
   }
 
@@ -291,7 +291,7 @@ function summarizeBatchResults(rootDir: string, skills: BatchSkillResult[]): Bat
 
 function buildBatchLintReport(result: BatchLintResult): string {
   const lines: string[] = [];
-  lines.push("# OpenClaw Skill Batch Lint Report");
+  lines.push("# SkillForge Batch Lint Report");
   lines.push("");
   lines.push(`- Root: \`${result.rootDir}\``);
   lines.push(`- Skills: ${result.skillCount}`);
@@ -329,7 +329,7 @@ async function writeBatchLintReport(result: BatchLintResult, reportPath?: string
 
   const destination =
     reportPath === true
-      ? path.join(result.rootDir, ".openclaw-skillkit", "lint-all.report.md")
+      ? path.join(result.rootDir, ".skillforge", "lint-all.report.md")
       : typeof reportPath === "string"
         ? path.resolve(reportPath)
         : undefined;
@@ -373,7 +373,7 @@ async function readFrontmatterName(skillDir: string): Promise<string | undefined
 
 async function discoverSkillDirs(rootDir: string): Promise<string[]> {
   const results: string[] = [];
-  const ignored = new Set([".git", "node_modules", "dist", ".openclaw-skillkit"]);
+  const ignored = new Set([".git", "node_modules", "dist", ".skillforge"]);
 
   async function walk(currentDir: string): Promise<void> {
     const entries = await readdir(currentDir, { withFileTypes: true });

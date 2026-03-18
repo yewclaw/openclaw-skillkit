@@ -56,7 +56,7 @@ test("buildReport combines detection and cli benchmark data", () => {
 });
 
 test("benchmark CLI can export a json report", async () => {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-benchmark-"));
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "skillforge-benchmark-"));
   const outputPath = path.join(tempDir, "benchmark.json");
 
   try {

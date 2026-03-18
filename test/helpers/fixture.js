@@ -6,7 +6,7 @@ const os = require("node:os");
 
 const fixturesRoot = path.resolve(__dirname, "..", "fixtures");
 
-async function makeTempDir(prefix = "openclaw-skillkit-") {
+async function makeTempDir(prefix = "skillforge-") {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
 }
 

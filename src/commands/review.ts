@@ -209,7 +209,7 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
                 code: "no-skills-found",
                 file: ".",
                 message: "No skills were found under the target directory.",
-                suggestion: 'Run "openclaw-skillkit init <dir>" to scaffold a skill, or point review at the repo containing skills.'
+                suggestion: 'Run "skillforge init <dir>" to scaffold a skill, or point review at the repo containing skills.'
               }
             ]
           },
@@ -225,13 +225,13 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
     console.log("Summary: no skill directories were found.");
     console.log("Next:");
     console.log("  1. Add at least one skill directory containing SKILL.md.");
-    console.log(`  2. Re-run: openclaw-skillkit review ${rootDir} --all`);
+    console.log(`  2. Re-run: skillforge review ${rootDir} --all`);
     return 1;
   }
 
   const artifactDir = options.outputDir
     ? path.resolve(options.outputDir)
-    : path.join(rootDir, ".openclaw-skillkit", "review-artifacts", `${Date.now()}`);
+    : path.join(rootDir, ".skillforge", "review-artifacts", `${Date.now()}`);
   const skills: BatchReviewedSkill[] = [];
 
   for (const skillDir of skillDirs) {
@@ -664,7 +664,7 @@ async function summarizeBatchReview(
 
 function buildBatchReviewReport(result: BatchReviewResult): string {
   const lines: string[] = [];
-  lines.push("# OpenClaw Skill Batch Review Report");
+  lines.push("# SkillForge Batch Review Report");
   lines.push("");
   lines.push(`- Root: \`${result.rootDir}\``);
   lines.push(`- Artifact directory: \`${result.artifactDir}\``);
@@ -852,7 +852,7 @@ async function writeBatchReviewReport(result: BatchReviewResult, reportPath?: st
 
   const destination =
     reportPath === true
-      ? path.join(result.rootDir, ".openclaw-skillkit", "review-all.report.md")
+      ? path.join(result.rootDir, ".skillforge", "review-all.report.md")
       : typeof reportPath === "string"
         ? path.resolve(reportPath)
         : undefined;
@@ -866,7 +866,7 @@ async function writeBatchReviewReport(result: BatchReviewResult, reportPath?: st
 
 async function discoverSkillDirs(rootDir: string): Promise<string[]> {
   const results: string[] = [];
-  const ignored = new Set([".git", "node_modules", "dist", ".openclaw-skillkit"]);
+  const ignored = new Set([".git", "node_modules", "dist", ".skillforge"]);
 
   async function walk(currentDir: string): Promise<void> {
     const entries = await readdir(currentDir, { withFileTypes: true });

@@ -60,7 +60,7 @@ async function captureCliOutput(args, cwd) {
 }
 
 serialTest("cli init scaffolds a skill with requested resources", async () => {
-  const tempDir = await makeTempDir("openclaw-init-");
+  const tempDir = await makeTempDir("skillforge-init-");
   const targetDir = path.join(tempDir, "customer-support");
 
   const result = await runCli([
@@ -81,8 +81,8 @@ serialTest("cli init scaffolds a skill with requested resources", async () => {
   assert.match(result.stdout, /Created: SKILL\.md, references\/, scripts\/, assets\//);
   assert.match(result.stdout, /Edit: .*SKILL\.md/);
   assert.match(result.stdout, /Reference example: examples\/weather-research-skill/);
-  assert.match(result.stdout, /Validate: openclaw-skillkit lint /);
-  assert.match(result.stdout, /Package when clean: openclaw-skillkit pack /);
+  assert.match(result.stdout, /Validate: skillforge lint /);
+  assert.match(result.stdout, /Package when clean: skillforge pack /);
   const skillMarkdown = await fs.readFile(path.join(targetDir, "SKILL.md"), "utf8");
   assert.match(skillMarkdown, /name: customer-support/);
   assert.match(skillMarkdown, /## Inputs/);
@@ -95,7 +95,7 @@ serialTest("cli init scaffolds a skill with requested resources", async () => {
 });
 
 serialTest("cli init template modes scaffold practical layouts", async () => {
-  const tempDir = await makeTempDir("openclaw-init-template-");
+  const tempDir = await makeTempDir("skillforge-init-template-");
   const scriptsDir = path.join(tempDir, "ops-skill");
   const fullDir = path.join(tempDir, "full-skill");
 
@@ -115,7 +115,7 @@ serialTest("cli init template modes scaffold practical layouts", async () => {
 });
 
 serialTest("cli lint succeeds for a valid fixture", async () => {
-  const tempDir = await makeTempDir("openclaw-lint-valid-");
+  const tempDir = await makeTempDir("skillforge-lint-valid-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
 
@@ -124,12 +124,12 @@ serialTest("cli lint succeeds for a valid fixture", async () => {
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Status: READY TO PACKAGE/);
   assert.match(result.stdout, /Confidence: no blocking issues or warnings were found\./);
-  assert.match(result.stdout, /Pack when ready: openclaw-skillkit pack /);
-  assert.match(result.stdout, /Run a full review before handoff: openclaw-skillkit review /);
+  assert.match(result.stdout, /Pack when ready: skillforge pack /);
+  assert.match(result.stdout, /Run a full review before handoff: skillforge review /);
 });
 
 serialTest("cli lint fails for an invalid fixture", async () => {
-  const tempDir = await makeTempDir("openclaw-lint-invalid-");
+  const tempDir = await makeTempDir("skillforge-lint-invalid-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("invalid", "bad-version-skill"), skillDir);
 
@@ -142,11 +142,11 @@ serialTest("cli lint fails for an invalid fixture", async () => {
   assert.match(result.stdout, /ERROR \[short-frontmatter-name\] SKILL\.md: Frontmatter name must be at least 3 characters/);
   assert.match(result.stdout, /Next:/);
   assert.match(result.stdout, /Fix blocking metadata issues first\./);
-  assert.match(result.stdout, /Re-run: openclaw-skillkit lint /);
+  assert.match(result.stdout, /Re-run: skillforge lint /);
 });
 
 serialTest("cli lint reports broken markdown references", async () => {
-  const tempDir = await makeTempDir("openclaw-lint-reference-");
+  const tempDir = await makeTempDir("skillforge-lint-reference-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("benchmark", "bad", "broken-reference-skill"), skillDir);
 
@@ -157,7 +157,7 @@ serialTest("cli lint reports broken markdown references", async () => {
 });
 
 serialTest("cli lint supports json output for CI and editor tooling", async () => {
-  const tempDir = await makeTempDir("openclaw-lint-json-");
+  const tempDir = await makeTempDir("skillforge-lint-json-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("invalid", "bad-version-skill"), skillDir);
 
@@ -188,7 +188,7 @@ serialTest("cli lint supports json output for CI and editor tooling", async () =
     }
   ]);
   assert.match(payload.nextSteps[0], /Fix blocking metadata issues first\./);
-  assert.match(payload.nextSteps[payload.nextSteps.length - 1], /Re-run: openclaw-skillkit lint /);
+  assert.match(payload.nextSteps[payload.nextSteps.length - 1], /Re-run: skillforge lint /);
   assert.deepEqual(payload.issues.slice(0, 2).map((issue) => issue.code), [
     "invalid-frontmatter-version",
     "short-frontmatter-name"
@@ -198,7 +198,7 @@ serialTest("cli lint supports json output for CI and editor tooling", async () =
 });
 
 serialTest("cli lint can run repo-scale validation across multiple skills", async () => {
-  const tempDir = await makeTempDir("openclaw-lint-all-");
+  const tempDir = await makeTempDir("skillforge-lint-all-");
   const skillsRoot = path.join(tempDir, "skills");
   await copyFixture(path.join("valid", "basic-skill"), path.join(skillsRoot, "weather"));
   await copyFixture(path.join("invalid", "bad-version-skill"), path.join(skillsRoot, "broken"));
@@ -219,7 +219,7 @@ serialTest("cli lint can run repo-scale validation across multiple skills", asyn
 });
 
 serialTest("cli lint --all detects duplicate skill names across directories", async () => {
-  const tempDir = await makeTempDir("openclaw-lint-duplicate-");
+  const tempDir = await makeTempDir("skillforge-lint-duplicate-");
   const skillsRoot = path.join(tempDir, "skills");
   const firstDir = path.join(skillsRoot, "first");
   const secondDir = path.join(skillsRoot, "second");
@@ -254,7 +254,7 @@ Detect duplicate frontmatter names in batch lint.
 });
 
 serialTest("cli lint --all can export a markdown report", async () => {
-  const tempDir = await makeTempDir("openclaw-lint-all-report-");
+  const tempDir = await makeTempDir("skillforge-lint-all-report-");
   const skillsRoot = path.join(tempDir, "skills");
   const reportPath = path.join(tempDir, "lint-all.md");
   await copyFixture(path.join("valid", "basic-skill"), path.join(skillsRoot, "weather"));
@@ -264,13 +264,13 @@ serialTest("cli lint --all can export a markdown report", async () => {
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Report: /);
   const report = await fs.readFile(reportPath, "utf8");
-  assert.match(report, /# OpenClaw Skill Batch Lint Report/);
+  assert.match(report, /# SkillForge Batch Lint Report/);
   assert.match(report, /## Skills/);
   assert.match(report, /### weather/);
 });
 
 serialTest("cli pack creates a .skill archive for a valid fixture", async () => {
-  const tempDir = await makeTempDir("openclaw-pack-valid-");
+  const tempDir = await makeTempDir("skillforge-pack-valid-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -282,16 +282,16 @@ serialTest("cli pack creates a .skill archive for a valid fixture", async () => 
   assert.match(result.stdout, /Archive ready: /);
   assert.match(result.stdout, /Skill: weather-research@1\.2\.3/);
   assert.match(result.stdout, /Contents: SKILL\.md, assets\/README\.txt, references\/README\.md, scripts\/example\.sh/);
-  assert.match(result.stdout, /Inspect the shipped artifact: openclaw-skillkit inspect /);
+  assert.match(result.stdout, /Inspect the shipped artifact: skillforge inspect /);
   const entries = await readArchiveEntries(outputPath);
   assert.deepEqual(entries.sort(), [
-    ".openclaw-skillkit/manifest.json",
+    ".skillforge/manifest.json",
     "SKILL.md",
     "assets/README.txt",
     "references/README.md",
     "scripts/example.sh"
   ]);
-  const manifest = JSON.parse(await readArchiveEntry(outputPath, ".openclaw-skillkit/manifest.json"));
+  const manifest = JSON.parse(await readArchiveEntry(outputPath, ".skillforge/manifest.json"));
   assert.equal(manifest.schemaVersion, 2);
   assert.deepEqual(manifest.skill, {
     name: "weather-research",
@@ -321,7 +321,7 @@ serialTest("cli pack creates a .skill archive for a valid fixture", async () => 
 });
 
 serialTest("cli pack surfaces warnings before creating the archive", async () => {
-  const tempDir = await makeTempDir("openclaw-pack-warning-");
+  const tempDir = await makeTempDir("skillforge-pack-warning-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -333,18 +333,18 @@ serialTest("cli pack surfaces warnings before creating the archive", async () =>
 });
 
 serialTest("cli pack fails when lint errors exist", async () => {
-  const tempDir = await makeTempDir("openclaw-pack-invalid-");
+  const tempDir = await makeTempDir("skillforge-pack-invalid-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("invalid", "bad-version-skill"), skillDir);
 
   const result = await runCli(["pack", skillDir]);
 
   assert.equal(result.code, 1);
-  assert.match(result.stderr, /Cannot pack .* because lint found 2 error\(s\)\. Run "openclaw-skillkit lint .*" first\./);
+  assert.match(result.stderr, /Cannot pack .* because lint found 2 error\(s\)\. Run "skillforge lint .*" first\./);
 });
 
 serialTest("cli pack defaults to the current directory", async () => {
-  const tempDir = await makeTempDir("openclaw-pack-cwd-");
+  const tempDir = await makeTempDir("skillforge-pack-cwd-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
 
@@ -356,7 +356,7 @@ serialTest("cli pack defaults to the current directory", async () => {
 });
 
 serialTest("cli pack appends .skill and creates the output directory when needed", async () => {
-  const tempDir = await makeTempDir("openclaw-pack-output-");
+  const tempDir = await makeTempDir("skillforge-pack-output-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifacts", "release", "artifact");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -369,7 +369,7 @@ serialTest("cli pack appends .skill and creates the output directory when needed
 });
 
 serialTest("cli pack supports json output for artifact pipelines", async () => {
-  const tempDir = await makeTempDir("openclaw-pack-json-");
+  const tempDir = await makeTempDir("skillforge-pack-json-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -382,7 +382,7 @@ serialTest("cli pack supports json output for artifact pipelines", async () => {
   assert.equal(payload.archiveSizeBytes > 0, true);
   assert.equal(payload.archiveSizeLabel.length > 0, true);
   assert.deepEqual(payload.warnings, []);
-  assert.match(payload.reportMarkdown, /# OpenClaw Skill Archive Report/);
+  assert.match(payload.reportMarkdown, /# SkillForge Archive Report/);
   assert.equal(payload.manifest.skill.name, "weather-research");
   assert.deepEqual(payload.manifest.entries.map((entry) => entry.path), [
     "SKILL.md",
@@ -393,7 +393,7 @@ serialTest("cli pack supports json output for artifact pipelines", async () => {
 });
 
 serialTest("cli pack can export a markdown handoff report", async () => {
-  const tempDir = await makeTempDir("openclaw-pack-report-");
+  const tempDir = await makeTempDir("skillforge-pack-report-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   const reportPath = path.join(tempDir, "artifact-review.md");
@@ -404,13 +404,13 @@ serialTest("cli pack can export a markdown handoff report", async () => {
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Report: /);
   const report = await fs.readFile(reportPath, "utf8");
-  assert.match(report, /# OpenClaw Skill Archive Report/);
+  assert.match(report, /# SkillForge Archive Report/);
   assert.match(report, /weather-research@1\.2\.3/);
   assert.match(report, /## Reviewer Checklist/);
 });
 
 serialTest("cli pack excludes nested .skill artifacts from the archive payload", async () => {
-  const tempDir = await makeTempDir("openclaw-pack-nested-artifact-");
+  const tempDir = await makeTempDir("skillforge-pack-nested-artifact-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -424,7 +424,7 @@ serialTest("cli pack excludes nested .skill artifacts from the archive payload",
 });
 
 serialTest("cli pack rejects unsupported output extensions", async () => {
-  const tempDir = await makeTempDir("openclaw-pack-extension-");
+  const tempDir = await makeTempDir("skillforge-pack-extension-");
   const skillDir = path.join(tempDir, "skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
 
@@ -438,16 +438,16 @@ serialTest("cli help supports command-specific output", async () => {
   const result = await runCli(["help", "pack"]);
 
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /openclaw-skillkit pack/);
+  assert.match(result.stdout, /skillforge pack/);
   assert.match(result.stdout, /Create a \.skill archive after lint passes\./);
-  assert.match(result.stdout, /openclaw-skillkit pack$/m);
+  assert.match(result.stdout, /skillforge pack$/m);
 });
 
 serialTest("cli help documents the review workflow", async () => {
   const result = await runCli(["help", "review"]);
 
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /openclaw-skillkit review/);
+  assert.match(result.stdout, /skillforge review/);
   assert.match(result.stdout, /release-readiness review/);
   assert.match(result.stdout, /--all/);
   assert.match(result.stdout, /--baseline-dir \.\/released-skills/);
@@ -458,13 +458,13 @@ serialTest("cli help documents the local studio command", async () => {
   const result = await runCli(["help", "serve"]);
 
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /openclaw-skillkit serve/);
-  assert.match(result.stdout, /local OpenClaw Skill Studio web interface/);
+  assert.match(result.stdout, /skillforge serve/);
+  assert.match(result.stdout, /local SkillForge Studio web interface/);
   assert.match(result.stdout, /--port 3210/);
 });
 
 serialTest("cli inspect reads the embedded archive manifest", async () => {
-  const tempDir = await makeTempDir("openclaw-inspect-");
+  const tempDir = await makeTempDir("skillforge-inspect-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -481,11 +481,11 @@ serialTest("cli inspect reads the embedded archive manifest", async () => {
   assert.match(result.stdout, /Description: Skill for structured weather research/);
   assert.match(result.stdout, /Checks: PASS manifest/);
   assert.match(result.stdout, /Contents: SKILL\.md \(\d+ B\), assets\/README\.txt/);
-  assert.match(result.stdout, /Next: run openclaw-skillkit inspect .* --source \.\/path-to-skill to check for drift\./);
+  assert.match(result.stdout, /Next: run skillforge inspect .* --source \.\/path-to-skill to check for drift\./);
 });
 
 serialTest("cli inspect supports json output", async () => {
-  const tempDir = await makeTempDir("openclaw-inspect-json-");
+  const tempDir = await makeTempDir("skillforge-inspect-json-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -500,7 +500,7 @@ serialTest("cli inspect supports json output", async () => {
   assert.equal(payload.trustSummary.status, "verified");
   assert.equal(payload.manifest.skill.version, "1.2.3");
   assert.equal(payload.manifest.entryCount, 4);
-  assert.match(payload.reportMarkdown, /# OpenClaw Skill Archive Report/);
+  assert.match(payload.reportMarkdown, /# SkillForge Archive Report/);
 });
 
 serialTest("cli help documents archive-to-archive inspection", async () => {
@@ -513,7 +513,7 @@ serialTest("cli help documents archive-to-archive inspection", async () => {
 });
 
 serialTest("cli inspect can compare an archive against its source directory", async () => {
-  const tempDir = await makeTempDir("openclaw-inspect-compare-");
+  const tempDir = await makeTempDir("skillforge-inspect-compare-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -531,7 +531,7 @@ serialTest("cli inspect can compare an archive against its source directory", as
 });
 
 serialTest("cli inspect can export a markdown drift report", async () => {
-  const tempDir = await makeTempDir("openclaw-inspect-report-");
+  const tempDir = await makeTempDir("skillforge-inspect-report-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -553,7 +553,7 @@ serialTest("cli inspect can export a markdown drift report", async () => {
 });
 
 serialTest("cli inspect can compare the current archive against a baseline archive", async () => {
-  const tempDir = await makeTempDir("openclaw-inspect-against-");
+  const tempDir = await makeTempDir("skillforge-inspect-against-");
   const skillDir = path.join(tempDir, "skill");
   const baselineArchivePath = path.join(tempDir, "baseline.skill");
   const currentArchivePath = path.join(tempDir, "current.skill");
@@ -577,7 +577,7 @@ serialTest("cli inspect can compare the current archive against a baseline archi
 });
 
 serialTest("cli inspect json can include both source and baseline comparisons", async () => {
-  const tempDir = await makeTempDir("openclaw-inspect-full-");
+  const tempDir = await makeTempDir("skillforge-inspect-full-");
   const skillDir = path.join(tempDir, "skill");
   const baselineArchivePath = path.join(tempDir, "baseline.skill");
   const currentArchivePath = path.join(tempDir, "current.skill");
@@ -605,7 +605,7 @@ serialTest("cli inspect json can include both source and baseline comparisons", 
 });
 
 serialTest("cli inspect can preview a bundled archive entry", async () => {
-  const tempDir = await makeTempDir("openclaw-inspect-entry-");
+  const tempDir = await makeTempDir("skillforge-inspect-entry-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   await copyFixture(path.join("valid", "basic-skill"), skillDir);
@@ -620,7 +620,7 @@ serialTest("cli inspect can preview a bundled archive entry", async () => {
 });
 
 serialTest("cli review packages a valid skill and reports readiness", async () => {
-  const tempDir = await makeTempDir("openclaw-review-cli-");
+  const tempDir = await makeTempDir("skillforge-review-cli-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   const reportPath = path.join(tempDir, "artifact.review.md");
@@ -636,13 +636,13 @@ serialTest("cli review packages a valid skill and reports readiness", async () =
   assert.match(result.stdout, /Report: /);
   await fs.access(outputPath);
   const report = await fs.readFile(reportPath, "utf8");
-  assert.match(report, /# OpenClaw Skill Review Report/);
+  assert.match(report, /# SkillForge Review Report/);
   assert.match(report, /## Release Summary/);
   assert.match(report, /Verdict: ready to ship/);
 });
 
 serialTest("cli review can include a baseline archive delta", async () => {
-  const tempDir = await makeTempDir("openclaw-review-baseline-");
+  const tempDir = await makeTempDir("skillforge-review-baseline-");
   const skillDir = path.join(tempDir, "skill");
   const baselineArchivePath = path.join(tempDir, "baseline.skill");
   const currentArchivePath = path.join(tempDir, "current.skill");
@@ -663,7 +663,7 @@ serialTest("cli review can include a baseline archive delta", async () => {
 });
 
 serialTest("cli review stops before packaging when the skill is not ready", async () => {
-  const tempDir = await makeTempDir("openclaw-review-cli-fail-");
+  const tempDir = await makeTempDir("skillforge-review-cli-fail-");
   const skillDir = path.join(tempDir, "skill");
   const outputPath = path.join(tempDir, "artifact.skill");
   await copyFixture(path.join("invalid", "bad-version-skill"), skillDir);
@@ -679,7 +679,7 @@ serialTest("cli review stops before packaging when the skill is not ready", asyn
 });
 
 serialTest("cli review --all runs repo-scale readiness checks and writes batch artifacts", async () => {
-  const tempDir = await makeTempDir("openclaw-review-all-");
+  const tempDir = await makeTempDir("skillforge-review-all-");
   const skillsRoot = path.join(tempDir, "skills");
   const artifactsDir = path.join(tempDir, "review-artifacts");
   const reportPath = path.join(tempDir, "review-all.md");
@@ -701,7 +701,7 @@ serialTest("cli review --all runs repo-scale readiness checks and writes batch a
   assert.equal(payload.artifactSummary.totalEntries, 4);
   assert.equal(payload.artifactSummary.largestArchives[0].relativeDir, "weather");
   assert.equal(payload.maintenanceSummary.issueHotspots[0].code, "invalid-frontmatter-version");
-  assert.match(payload.reportMarkdown, /# OpenClaw Skill Batch Review Report/);
+  assert.match(payload.reportMarkdown, /# SkillForge Batch Review Report/);
   assert.match(payload.reportMarkdown, /## Artifact Inventory/);
   assert.match(payload.reportMarkdown, /## Issue Hotspots/);
   assert.deepEqual(
@@ -722,7 +722,7 @@ serialTest("cli review --all runs repo-scale readiness checks and writes batch a
 });
 
 serialTest("cli review --all can match baseline archives from a directory", async () => {
-  const tempDir = await makeTempDir("openclaw-review-all-baseline-");
+  const tempDir = await makeTempDir("skillforge-review-all-baseline-");
   const skillsRoot = path.join(tempDir, "skills");
   const baselinesDir = path.join(tempDir, "baselines");
   const artifactsDir = path.join(tempDir, "artifacts");

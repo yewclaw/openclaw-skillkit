@@ -35,8 +35,8 @@ async function runLint(targetDir, options) {
     if (summary.total === 0) {
         console.log("  Confidence: no blocking issues or warnings were found.");
         console.log("Next:");
-        console.log(`  1. Pack when ready: openclaw-skillkit pack ${resolved}`);
-        console.log(`  2. Run a full review before handoff: openclaw-skillkit review ${resolved}`);
+        console.log(`  1. Pack when ready: skillforge pack ${resolved}`);
+        console.log(`  2. Run a full review before handoff: skillforge review ${resolved}`);
         return 0;
     }
     const focusAreas = (0, workflow_1.summarizeFocusAreas)(result);
@@ -81,7 +81,7 @@ async function runBatchLint(rootDir, options) {
                         code: "no-skills-found",
                         file: ".",
                         message: "No skills were found under the target directory.",
-                        suggestion: 'Run "openclaw-skillkit init <dir>" to scaffold a skill, or point lint at the repo containing skills.'
+                        suggestion: 'Run "skillforge init <dir>" to scaffold a skill, or point lint at the repo containing skills.'
                     }
                 ]
             }, null, 2));
@@ -92,7 +92,7 @@ async function runBatchLint(rootDir, options) {
         console.log("Summary: no skill directories were found.");
         console.log("Next:");
         console.log("  1. Add at least one skill directory containing SKILL.md.");
-        console.log(`  2. Re-run: openclaw-skillkit lint ${rootDir} --all`);
+        console.log(`  2. Re-run: skillforge lint ${rootDir} --all`);
         return 1;
     }
     const baseResults = await Promise.all(skillDirs.map(async (skillDir) => {
@@ -213,7 +213,7 @@ function summarizeBatchResults(rootDir, skills) {
 }
 function buildBatchLintReport(result) {
     const lines = [];
-    lines.push("# OpenClaw Skill Batch Lint Report");
+    lines.push("# SkillForge Batch Lint Report");
     lines.push("");
     lines.push(`- Root: \`${result.rootDir}\``);
     lines.push(`- Skills: ${result.skillCount}`);
@@ -246,7 +246,7 @@ async function writeBatchLintReport(result, reportPath) {
         return undefined;
     }
     const destination = reportPath === true
-        ? node_path_1.default.join(result.rootDir, ".openclaw-skillkit", "lint-all.report.md")
+        ? node_path_1.default.join(result.rootDir, ".skillforge", "lint-all.report.md")
         : typeof reportPath === "string"
             ? node_path_1.default.resolve(reportPath)
             : undefined;
@@ -283,7 +283,7 @@ async function readFrontmatterName(skillDir) {
 }
 async function discoverSkillDirs(rootDir) {
     const results = [];
-    const ignored = new Set([".git", "node_modules", "dist", ".openclaw-skillkit"]);
+    const ignored = new Set([".git", "node_modules", "dist", ".skillforge"]);
     async function walk(currentDir) {
         const entries = await (0, promises_1.readdir)(currentDir, { withFileTypes: true });
         const hasSkillFile = entries.some((entry) => entry.isFile() && entry.name === "SKILL.md");

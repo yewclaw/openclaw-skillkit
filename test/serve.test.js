@@ -12,7 +12,7 @@ const { listExampleSkills, packSkill, inspectSkillArchive } = require("../dist/l
 test("studio assets expose the local app shell and workflow controls", () => {
   const assets = getStudioAssets();
 
-  assert.match(assets.html, /OpenClaw Skill Studio/);
+  assert.match(assets.html, /SkillForge Studio/);
   assert.match(assets.html, /One Clear Skill Pipeline/);
   assert.match(assets.html, /id="status-title"/);
   assert.match(assets.html, /id="init-form"/);
@@ -64,13 +64,13 @@ test("workflow helpers surface example skills for the studio", async () => {
   assert.equal(examples.some((example) => example.resources.includes("scripts")), true);
   const weatherExample = examples.find((example) => example.name === "weather-research-skill");
   assert.equal(weatherExample.recommendedTemplate, "scripts");
-  assert.match(weatherExample.starterCommand, /openclaw-skillkit init \.\/skills\/weather-research-skill --template scripts/);
+  assert.match(weatherExample.starterCommand, /skillforge init \.\/skills\/weather-research-skill --template scripts/);
   assert.equal(weatherExample.useCases.length > 0, true);
   assert.equal(weatherExample.workflowSteps.length > 0, true);
 });
 
 test("workflow helpers can pack and inspect a scaffolded studio skill", async () => {
-  const tempDir = await makeTempDir("openclaw-studio-workflow-");
+  const tempDir = await makeTempDir("skillforge-studio-workflow-");
   const skillDir = path.join(tempDir, "studio-skill");
   const archivePath = path.join(tempDir, "studio-skill.skill");
 

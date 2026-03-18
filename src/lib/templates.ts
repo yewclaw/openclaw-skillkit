@@ -34,7 +34,7 @@ Help the model execute {{title}} work with a predictable, reviewable workflow.
 ## Customization Checklist
 1. Replace this scaffold text with domain-specific steps, checks, and language.
 2. Add local links under \`references/\`, \`scripts/\`, or \`assets/\` when they improve repeatability.
-3. Run \`openclaw-skillkit lint .\` before packaging the skill.
+3. Run \`skillforge lint .\` before packaging the skill.
 `;
 
 export const TEMPLATE_MODES = {

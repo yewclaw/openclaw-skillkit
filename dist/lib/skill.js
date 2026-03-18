@@ -11,7 +11,7 @@ const frontmatter_1 = require("./frontmatter");
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const PLACEHOLDER_DESCRIPTION_PATTERNS = [
     /\b(todo|tbd|placeholder|fill in|write a description)\b/i,
-    /^openclaw skill for\b/i
+    /^skillforge skill for\b/i
 ];
 const PLACEHOLDER_BODY_PATTERNS = [
     /Explain what this skill helps the model do\./i,
@@ -46,7 +46,7 @@ async function lintSkill(skillDir) {
     if (!(await (0, fs_1.exists)(skillFile))) {
         issues.push(createIssue("error", "missing-skill-file", ".", "Missing SKILL.md at the skill root.", {
             category: "filesystem",
-            suggestion: 'Run "openclaw-skillkit init <dir>" or add SKILL.md before packaging this skill.'
+            suggestion: 'Run "skillforge init <dir>" or add SKILL.md before packaging this skill.'
         }));
         return { skillDir, issues, fileCount: 0 };
     }

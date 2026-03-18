@@ -89,7 +89,7 @@ test("lintSkill reports missing skill file", async () => {
     category: "filesystem",
     file: ".",
     message: "Missing SKILL.md at the skill root.",
-    suggestion: 'Run "openclaw-skillkit init <dir>" or add SKILL.md before packaging this skill.'
+    suggestion: 'Run "skillforge init <dir>" or add SKILL.md before packaging this skill.'
   });
 });
 
@@ -114,7 +114,7 @@ test("lintSkill detects missing local markdown references", async () => {
 });
 
 test("lintSkill rejects local references that escape the skill root", async () => {
-  const skillDir = await makeTempDir("openclaw-reference-escape-");
+  const skillDir = await makeTempDir("skillforge-reference-escape-");
   const outsideReference = path.join(path.dirname(skillDir), "outside.md");
   await fs.writeFile(outsideReference, "# Not bundled\n");
   await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
@@ -145,7 +145,7 @@ Keep local references self-contained.
 });
 
 test("lintSkill rejects local references that point to directories", async () => {
-  const skillDir = await makeTempDir("openclaw-reference-directory-");
+  const skillDir = await makeTempDir("skillforge-reference-directory-");
   await fs.mkdir(path.join(skillDir, "references"), { recursive: true });
   await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
 name: directory-reference-check
@@ -210,7 +210,7 @@ test("lintSkill returns machine-readable issue metadata and suggestions", async 
 });
 
 test("lintSkill warns when the workflow section is not expressed as numbered steps", async () => {
-  const skillDir = await makeTempDir("openclaw-workflow-warning-");
+  const skillDir = await makeTempDir("skillforge-workflow-warning-");
   await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
 name: workflow-gap
 description: Skill for catching weak workflow guidance before packaging.
@@ -238,7 +238,7 @@ Help the model complete a task.
 });
 
 test("lintSkill warns when bundled scripts are not executable", async () => {
-  const skillDir = await makeTempDir("openclaw-script-mode-");
+  const skillDir = await makeTempDir("skillforge-script-mode-");
   const scriptsDir = path.join(skillDir, "scripts");
   await fs.mkdir(scriptsDir, { recursive: true });
   await fs.writeFile(path.join(skillDir, "SKILL.md"), `---
@@ -270,7 +270,7 @@ Catch broken script packaging before release.
 });
 
 test("workflow helpers can compare archives across releases", async () => {
-  const tempDir = await makeTempDir("openclaw-release-compare-");
+  const tempDir = await makeTempDir("skillforge-release-compare-");
   const skillDir = path.join(tempDir, "skill");
   const baselineArchivePath = path.join(tempDir, "baseline.skill");
   const currentArchivePath = path.join(tempDir, "current.skill");
@@ -337,7 +337,7 @@ Compare release artifacts.
 });
 
 test("compareArchiveToSource detects drift and manifest hashes after packaging", async () => {
-  const skillDir = await makeTempDir("openclaw-compare-");
+  const skillDir = await makeTempDir("skillforge-compare-");
   const archivePath = path.join(skillDir, "artifact.skill");
   await fs.mkdir(path.join(skillDir, "references"), { recursive: true });
   await fs.writeFile(path.join(skillDir, "references", "README.md"), "# Guide\n");
@@ -371,14 +371,14 @@ Verify that artifact inspection can detect source drift.
   assert.equal(inspected.comparison.changedEntries[0].path, "references/README.md");
   assert.equal(inspected.comparison.changedEntries[0].reason, "size-mismatch");
   const report = buildArchiveReport(inspected);
-  assert.match(report, /# OpenClaw Skill Archive Report/);
+  assert.match(report, /# SkillForge Archive Report/);
   assert.match(report, /Status: drift detected/);
   assert.match(report, /### Changed Files/);
 });
 
 test("archive workflow can summarize contents and preview a bundled entry", async () => {
   const skillDir = path.resolve(__dirname, "fixtures", "valid", "basic-skill");
-  const tempDir = await makeTempDir("openclaw-archive-preview-");
+  const tempDir = await makeTempDir("skillforge-archive-preview-");
   const archivePath = path.join(tempDir, "artifact.skill");
 
   const packed = await packSkill(skillDir, archivePath);
@@ -397,7 +397,7 @@ test("archive workflow can summarize contents and preview a bundled entry", asyn
 
 test("reviewSkill produces a ready verdict and combined review report for a valid skill", async () => {
   const skillDir = path.resolve(__dirname, "fixtures", "valid", "basic-skill");
-  const tempDir = await makeTempDir("openclaw-review-valid-");
+  const tempDir = await makeTempDir("skillforge-review-valid-");
   const archivePath = path.join(tempDir, "artifact.skill");
 
   const review = await reviewSkill(skillDir, archivePath);
@@ -407,12 +407,12 @@ test("reviewSkill produces a ready verdict and combined review report for a vali
   assert.equal(review.archive.destination, archivePath);
   assert.equal(review.archive.comparison.matches, true);
   const report = buildReviewReport(review);
-  assert.match(report, /# OpenClaw Skill Review Report/);
+  assert.match(report, /# SkillForge Review Report/);
   assert.match(report, /Verdict: ready to ship/);
 });
 
 test("reviewSkill can include a baseline archive comparison", async () => {
-  const tempDir = await makeTempDir("openclaw-review-skill-baseline-");
+  const tempDir = await makeTempDir("skillforge-review-skill-baseline-");
   const skillDir = path.join(tempDir, "skill");
   const baselineArchivePath = path.join(tempDir, "baseline.skill");
   const currentArchivePath = path.join(tempDir, "current.skill");

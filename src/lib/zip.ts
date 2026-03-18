@@ -6,7 +6,7 @@ import { listFilesRecursive } from "./fs";
 import { parseFrontmatter } from "./frontmatter";
 
 const crcTable = createCrcTable();
-const PACK_MANIFEST_PATH = ".openclaw-skillkit/manifest.json";
+const PACK_MANIFEST_PATH = ".skillforge/manifest.json";
 
 interface ZipEntry {
   name: string;

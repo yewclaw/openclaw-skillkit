@@ -142,7 +142,7 @@ async function writeReport(outputPath, report) {
 }
 
 function printHelp() {
-  console.log(`openclaw benchmark
+  console.log(`skillforge benchmark
 
 Usage:
   npm run benchmark

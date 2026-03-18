@@ -69,8 +69,8 @@ function buildActionPlan(result, resolvedDir) {
     const focusAreas = summarizeFocusAreas(result);
     if (focusAreas.length === 0) {
         return [
-            `Pack when ready: openclaw-skillkit pack ${resolvedDir}`,
-            `Run a release check before handoff: openclaw-skillkit review ${resolvedDir}`
+            `Pack when ready: skillforge pack ${resolvedDir}`,
+            `Run a release check before handoff: skillforge review ${resolvedDir}`
         ];
     }
     const steps = [];
@@ -82,10 +82,10 @@ function buildActionPlan(result, resolvedDir) {
     if (warningArea) {
         steps.push(`Then review ${warningArea.label.toLowerCase()} warnings. ${warningArea.suggestion}`);
     }
-    steps.push(`Re-run: openclaw-skillkit lint ${resolvedDir}`);
+    steps.push(`Re-run: skillforge lint ${resolvedDir}`);
     if (!blockingArea) {
-        steps.push(`Pack when ready: openclaw-skillkit pack ${resolvedDir}`);
-        steps.push(`Run a release check before handoff: openclaw-skillkit review ${resolvedDir}`);
+        steps.push(`Pack when ready: skillforge pack ${resolvedDir}`);
+        steps.push(`Run a release check before handoff: skillforge review ${resolvedDir}`);
     }
     return steps;
 }
@@ -124,7 +124,7 @@ async function packSkill(targetDir, outputPath) {
     const errors = lintResult.issues.filter((issue) => issue.level === "error");
     const warnings = lintResult.issues.filter((issue) => issue.level === "warning");
     if (errors.length > 0) {
-        throw new Error(`Cannot pack ${resolvedDir} because lint found ${errors.length} error(s). Run "openclaw-skillkit lint ${resolvedDir}" first.`);
+        throw new Error(`Cannot pack ${resolvedDir} because lint found ${errors.length} error(s). Run "skillforge lint ${resolvedDir}" first.`);
     }
     const { destination, normalizedOutputPath } = resolveArchiveDestination(resolvedDir, outputPath);
     if (await (0, fs_1.exists)(destination)) {
@@ -436,7 +436,7 @@ function buildArchiveReport(result) {
     const trust = summarizeArchiveTrust(result);
     const insights = result.archiveInsights ?? summarizeArchiveContents(result.manifest);
     const lines = [
-        "# OpenClaw Skill Archive Report",
+        "# SkillForge Archive Report",
         "",
         `Generated: ${generatedAt}`,
         "",
@@ -526,7 +526,7 @@ function buildArchiveReport(result) {
     }
     if (!result.comparison) {
         lines.push(`- Status: packaged artifact reviewed without source comparison`);
-        lines.push(`- Next: run \`openclaw-skillkit inspect ${result.archivePath} --source ./path-to-skill\` to include drift status`);
+        lines.push(`- Next: run \`skillforge inspect ${result.archivePath} --source ./path-to-skill\` to include drift status`);
     }
     if (result.entryPreview) {
         lines.push("", "## Entry Preview", `- Entry: ${result.entryPreview.path}`, `- Size: ${formatBytes(result.entryPreview.size)}`, `- Lines: ${result.entryPreview.lineCount}`, `- Text preview: ${result.entryPreview.text ? "yes" : "no"}`);
@@ -538,7 +538,7 @@ function buildArchiveReport(result) {
 function buildReviewReport(review) {
     const summary = summarizeReviewReadiness(review);
     const lines = [
-        "# OpenClaw Skill Review Report",
+        "# SkillForge Review Report",
         "",
         `Generated: ${new Date().toISOString()}`,
         "",
@@ -607,7 +607,7 @@ function summarizeArchiveTrust(result) {
             headline: "Archive manifest verified",
             confidence: "The packaged artifact includes a readable manifest, but source parity has not been checked yet.",
             checks,
-            nextStep: `openclaw-skillkit inspect ${result.archivePath} --source ./path-to-skill`
+            nextStep: `skillforge inspect ${result.archivePath} --source ./path-to-skill`
         };
     }
     const comparison = result.comparison;
@@ -800,7 +800,7 @@ async function listExampleSkills(repoRoot = node_path_1.default.resolve(__dirnam
             resources,
             recommendedTemplate,
             suggestedTargetDir: `./skills/${parsed.attributes.name ?? entry.name}`,
-            starterCommand: `openclaw-skillkit init ./skills/${parsed.attributes.name ?? entry.name} --template ${recommendedTemplate}`,
+            starterCommand: `skillforge init ./skills/${parsed.attributes.name ?? entry.name} --template ${recommendedTemplate}`,
             useCases,
             workflowSteps,
             workflowPreview: workflowSteps[0] ?? "Review the example and adapt its workflow to your own domain."

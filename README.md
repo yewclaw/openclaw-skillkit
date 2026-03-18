@@ -1,4 +1,4 @@
-# openclaw-skillkit
+# SkillForge
 
 <p align="center">
   <img src="https://img.shields.io/badge/node-22%2B-3C873A?logo=node.js&logoColor=white" alt="Node.js 22+" />
@@ -6,12 +6,12 @@
   <img src="https://img.shields.io/badge/verify-npm%20run%20verify-0A7F5A" alt="Verify with npm run verify" />
 </p>
 
-<p align="center"><strong>The official-feeling toolkit for authoring, validating, packaging, and demoing OpenClaw skills.</strong></p>
+<p align="center"><strong>A polished toolkit for authoring, validating, packaging, inspecting, and reviewing reusable skills.</strong></p>
 
-`openclaw-skillkit` turns skill authoring into a repeatable product workflow instead of a folder of markdown that drifts over time. It gives you one toolkit with two aligned surfaces: a strong CLI for day-to-day work and a local Skill Studio for demos, onboarding, and review.
+`SkillForge` turns skill authoring into a repeatable product workflow instead of a folder of markdown that drifts over time. It gives you one toolkit with two aligned surfaces: a strong CLI for day-to-day work and SkillForge Studio for demos, onboarding, and review.
 
 <p align="center">
-  <img src="./docs/assets/skillkit-flow.svg" alt="Workflow diagram showing init, author, lint, pack, and benchmark steps in openclaw-skillkit." width="920" />
+  <img src="./docs/assets/skillkit-flow.svg" alt="Workflow diagram showing init, author, lint, pack, and benchmark steps in SkillForge." width="920" />
 </p>
 
 ## At a Glance
@@ -23,12 +23,12 @@
 | `pack` | Create a `.skill` archive only after validation passes, with a manifest and optional release report for inspection. |
 | `inspect` | Read a packaged archive back out, verify exactly what it contains, preview bundled files, and optionally export a handoff report. |
 | `review` | Run a release-readiness pass for one skill or a whole repo, package clean artifacts, verify source parity, optionally compare against prior releases, and emit handoff-ready reports. |
-| `serve` | Launch a local Skill Studio web UI for demos, examples, linting, packaging, and archive inspection. |
+| `serve` | Launch SkillForge Studio for demos, examples, linting, packaging, and archive inspection. |
 | `benchmark` | Measure fixture detection quality and CLI round-trip performance with repeatable runs. |
 
 ## One Toolkit, Two Surfaces
 
-Use the CLI when you want speed and scripting. Use Skill Studio when you want a clearer authoring flow, example-driven onboarding, or a more legible demo for other people. Both surfaces run the same real workflow:
+Use the CLI when you want speed and scripting. Use SkillForge Studio when you want a clearer authoring flow, example-driven onboarding, or a more legible demo for other people. Both surfaces run the same real workflow:
 
 1. initialize or load a skill
 2. lint it with concrete fix guidance
@@ -45,7 +45,7 @@ Most skill repos lose trust for predictable reasons:
 - packaging becomes manual, so validation gets skipped
 - quality debates stay subjective because nobody runs the same checks
 
-`openclaw-skillkit` keeps the workflow small: create, author, lint, pack, inspect, benchmark.
+`SkillForge` keeps the workflow small: create, author, lint, pack, inspect, benchmark.
 
 ## Quickstart
 
@@ -67,12 +67,12 @@ npm run ui
 Create a skill, edit it, validate it, and package it:
 
 ```bash
-npx openclaw-skillkit init skills/customer-support --template scripts
+npx skillforge init skills/customer-support --template scripts
 $EDITOR skills/customer-support/SKILL.md
-npx openclaw-skillkit lint skills/customer-support
-npx openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
-npx openclaw-skillkit inspect ./artifacts/customer-support.skill
-npx openclaw-skillkit review skills/customer-support --output ./artifacts/customer-support.skill --report
+npx skillforge lint skills/customer-support
+npx skillforge pack skills/customer-support --output ./artifacts/customer-support.skill
+npx skillforge inspect ./artifacts/customer-support.skill
+npx skillforge review skills/customer-support --output ./artifacts/customer-support.skill --report
 ```
 
 If you want to use the checked-in build directly:
@@ -87,9 +87,9 @@ node bench/index.js --iterations 3
 
 ## Local Studio
 
-`openclaw-skillkit serve` starts a lightweight local web interface on `http://127.0.0.1:3210` by default. It uses the same real workflow as the CLI, not mocked demo actions.
+`skillforge serve` starts a lightweight local web interface on `http://127.0.0.1:3210` by default. It uses the same real workflow as the CLI, not mocked demo actions.
 
-Skill Studio is designed to feel like the product surface for the toolkit, not a separate experiment. It makes the path through skill authoring explicit:
+SkillForge Studio is designed to feel like the product surface for the toolkit, not a separate experiment. It makes the path through skill authoring explicit:
 
 - start from an example or scaffold a new skill
 - see the current workflow status at a glance
@@ -113,7 +113,7 @@ Run it with either command:
 
 ```bash
 npm run ui
-openclaw-skillkit serve --port 3210
+skillforge serve --port 3210
 ```
 
 ## Workflow
@@ -123,7 +123,7 @@ openclaw-skillkit serve --port 3210
 `init` creates a ready-to-edit skill directory instead of another ad hoc markdown file.
 
 ```bash
-openclaw-skillkit init skills/customer-support \
+skillforge init skills/customer-support \
   --name customer-support \
   --description "Skill for support triage workflows" \
   --template scripts
@@ -156,11 +156,11 @@ The generated `SKILL.md` now includes practical sections for `Inputs`, `Output`,
 If you are not sure where to start, use the examples as authoring blueprints instead of copying folders manually:
 
 ```bash
-openclaw-skillkit init ./skills/weather-research-skill --template scripts
-openclaw-skillkit init ./skills/customer-support-triage-skill --template references
+skillforge init ./skills/weather-research-skill --template scripts
+skillforge init ./skills/customer-support-triage-skill --template references
 ```
 
-Skill Studio now surfaces the same adaptation path directly in each example card, including a prefilled create form, the recommended template, and the first workflow step to borrow.
+SkillForge Studio now surfaces the same adaptation path directly in each example card, including a prefilled create form, the recommended template, and the first workflow step to borrow.
 
 ### 2. Catch trust-breaking issues early
 
@@ -181,41 +181,41 @@ Skill Studio now surfaces the same adaptation path directly in each example card
 - optional markdown report export (`--report`) for async review handoffs
 
 ```bash
-openclaw-skillkit lint skills/customer-support
-npx openclaw-skillkit lint skills/customer-support --json
-openclaw-skillkit lint skills --all --report
+skillforge lint skills/customer-support
+npx skillforge lint skills/customer-support --json
+skillforge lint skills --all --report
 ```
 
 Example success output:
 
 ```text
-Linting /tmp/openclaw-skillkit-repo/examples/weather-research-skill
+Linting /tmp/skillforge-repo/examples/weather-research-skill
 Status: READY TO PACKAGE
 Summary: 0 error(s), 0 warning(s), 1 file(s) checked.
   Confidence: no blocking issues or warnings were found.
 Next:
-  1. Pack when ready: openclaw-skillkit pack /tmp/openclaw-skillkit-repo/examples/weather-research-skill
-  2. Run a full review before handoff: openclaw-skillkit review /tmp/openclaw-skillkit-repo/examples/weather-research-skill
+  1. Pack when ready: skillforge pack /tmp/skillforge-repo/examples/weather-research-skill
+  2. Run a full review before handoff: skillforge review /tmp/skillforge-repo/examples/weather-research-skill
 ```
 
 Example actionable failure output:
 
 ```text
-Linting /tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill
+Linting /tmp/skillforge-repo/test/fixtures/invalid/bad-version-skill
   ERROR [invalid-frontmatter-version] SKILL.md: Frontmatter version must look like semver. Received "version1".
     Fix: Use a semver-style version such as "0.1.0" or "1.2.3-beta.1".
 Summary: 2 error(s), 2 warning(s), 1 file(s) checked.
 Next:
   1. Fix blocking metadata issues first. Update the SKILL.md frontmatter so name, description, and version clearly identify the skill.
   2. Then review structure warnings. Add the standard sections and make the workflow easy to follow as numbered steps.
-  3. Re-run: openclaw-skillkit lint /tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill
+  3. Re-run: skillforge lint /tmp/skillforge-repo/test/fixtures/invalid/bad-version-skill
 ```
 
 Example JSON output:
 
 ```json
 {
-  "skillDir": "/tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill",
+  "skillDir": "/tmp/skillforge-repo/test/fixtures/invalid/bad-version-skill",
   "fileCount": 1,
   "summary": {
     "total": 4,
@@ -234,7 +234,7 @@ Example JSON output:
   "nextSteps": [
     "Fix blocking metadata issues first. Update the SKILL.md frontmatter so name, description, and version clearly identify the skill.",
     "Then review structure warnings. Add the standard sections and make the workflow easy to follow as numbered steps.",
-    "Re-run: openclaw-skillkit lint /tmp/openclaw-skillkit-repo/test/fixtures/invalid/bad-version-skill"
+    "Re-run: skillforge lint /tmp/skillforge-repo/test/fixtures/invalid/bad-version-skill"
   ],
   "issues": [
     {
@@ -251,32 +251,32 @@ Example JSON output:
 
 ### 3. Package only when a skill is ready to ship
 
-`pack` runs lint first and refuses to create a `.skill` archive if blocking errors exist. It also skips nested `.skill` files and writes `.openclaw-skillkit/manifest.json` into the archive so adopters can inspect exactly what was bundled, including per-file sizes and hashes.
+`pack` runs lint first and refuses to create a `.skill` archive if blocking errors exist. It also skips nested `.skill` files and writes `.skillforge/manifest.json` into the archive so adopters can inspect exactly what was bundled, including per-file sizes and hashes.
 
 ```bash
-openclaw-skillkit pack skills/customer-support
-openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
-openclaw-skillkit pack skills/customer-support --report
-openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill --json
+skillforge pack skills/customer-support
+skillforge pack skills/customer-support --output ./artifacts/customer-support.skill
+skillforge pack skills/customer-support --report
+skillforge pack skills/customer-support --output ./artifacts/customer-support.skill --json
 ```
 
 If you are already inside a skill directory:
 
 ```bash
-openclaw-skillkit pack
+skillforge pack
 ```
 
 Example success output:
 
 ```text
 PACKAGED SUCCESSFULLY
-Archive ready: /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill
+Archive ready: /tmp/skillforge-repo/artifacts/customer-support.skill
   Skill: customer-support@0.1.0 (4 bundled file(s) plus manifest, 1.3 KB).
   Confidence: the archive includes an embedded manifest for later inspection.
   Contents: SKILL.md, references/README.md, scripts/example.sh, assets/README.txt
 Next:
-  1. Inspect the shipped artifact: openclaw-skillkit inspect /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill
-  2. Verify source parity: openclaw-skillkit inspect /tmp/openclaw-skillkit-repo/artifacts/customer-support.skill --source ./path-to-skill
+  1. Inspect the shipped artifact: skillforge inspect /tmp/skillforge-repo/artifacts/customer-support.skill
+  2. Verify source parity: skillforge inspect /tmp/skillforge-repo/artifacts/customer-support.skill --source ./path-to-skill
 ```
 
 Use `--report` to write a Markdown handoff summary next to the archive by default, or pass an explicit path such as `--report ./artifacts/customer-support.report.md`.
@@ -288,13 +288,13 @@ Use `--report` to write a Markdown handoff summary next to the archive by defaul
 Use `inspect` to verify the packaged manifest instead of trusting a zip file blindly:
 
 ```bash
-openclaw-skillkit inspect ./artifacts/customer-support.skill
-openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
-openclaw-skillkit inspect ./artifacts/customer-support.skill --against ./artifacts/customer-support-prev.skill
-openclaw-skillkit inspect ./artifacts/customer-support.skill --entry SKILL.md
-openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
-openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
-openclaw-skillkit inspect ./artifacts/customer-support.skill --json
+skillforge inspect ./artifacts/customer-support.skill
+skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support
+skillforge inspect ./artifacts/customer-support.skill --against ./artifacts/customer-support-prev.skill
+skillforge inspect ./artifacts/customer-support.skill --entry SKILL.md
+skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
+skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
+skillforge inspect ./artifacts/customer-support.skill --json
 ```
 
 Adding `--source` compares the archive to a current skill directory so you can catch drift before review or publication. That comparison reports:
@@ -331,12 +331,12 @@ Adding `--report` exports the same inspection as a Markdown review artifact that
 - can run across a whole repo with `--all`, writing one artifact per skill plus a batch rollup
 
 ```bash
-openclaw-skillkit review skills/customer-support
-openclaw-skillkit review skills/customer-support --against ./artifacts/customer-support-prev.skill
-openclaw-skillkit review skills/customer-support --output ./artifacts/customer-support.skill --report
-openclaw-skillkit review skills --all --output-dir ./artifacts/review
-openclaw-skillkit review skills --all --baseline-dir ./released-skills --report
-openclaw-skillkit review skills/customer-support --json
+skillforge review skills/customer-support
+skillforge review skills/customer-support --against ./artifacts/customer-support-prev.skill
+skillforge review skills/customer-support --output ./artifacts/customer-support.skill --report
+skillforge review skills --all --output-dir ./artifacts/review
+skillforge review skills --all --baseline-dir ./released-skills --report
+skillforge review skills/customer-support --json
 ```
 
 If blocking lint errors remain, `review` exits non-zero and does not create an archive. When the skill is ready, the report captures both authoring quality and artifact trust in one place. Adding `--against` folds release delta review into that same pass so handoff notes stay attached to the actual artifact being shipped.
@@ -356,14 +356,14 @@ The result is still one compact scorecard, but it reduces the manual digging tha
 
 | Command | Purpose |
 | --- | --- |
-| `openclaw-skillkit help` | Show CLI help. |
-| `openclaw-skillkit help init` | Show scaffold options and flags. |
-| `openclaw-skillkit help lint` | Show lint modes, including JSON output, repo-wide `--all`, and report export. |
-| `openclaw-skillkit help pack` | Show packaging behavior, output options, JSON reporting, and report export. |
-| `openclaw-skillkit help inspect` | Show artifact inspection, source drift comparison, entry preview, release delta comparison, and report export usage. |
-| `openclaw-skillkit help review` | Show single-skill and repo-scale review workflows, including baseline comparison and report export usage. |
-| `openclaw-skillkit help serve` | Show local studio host and port options. |
-| `openclaw-skillkit serve` | Start the local Skill Studio web interface. |
+| `skillforge help` | Show CLI help. |
+| `skillforge help init` | Show scaffold options and flags. |
+| `skillforge help lint` | Show lint modes, including JSON output, repo-wide `--all`, and report export. |
+| `skillforge help pack` | Show packaging behavior, output options, JSON reporting, and report export. |
+| `skillforge help inspect` | Show artifact inspection, source drift comparison, entry preview, release delta comparison, and report export usage. |
+| `skillforge help review` | Show single-skill and repo-scale review workflows, including baseline comparison and report export usage. |
+| `skillforge help serve` | Show local studio host and port options. |
+| `skillforge serve` | Start SkillForge Studio. |
 | `npm run benchmark -- --help` | Show benchmark runner flags. |
 | `npm run check` | Type-check without emitting build output. |
 | `npm run build` | Compile the CLI into `dist/`. |

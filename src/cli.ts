@@ -41,7 +41,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       printHelp("overview");
       return;
     default:
-      throw new Error(`Unknown command "${parsed.command}". Run "openclaw-skillkit help" for usage.`);
+      throw new Error(`Unknown command "${parsed.command}". Run "skillforge help" for usage.`);
   }
 }
 
@@ -51,7 +51,7 @@ async function handleInit(parsed: ReturnType<typeof parseArgs>): Promise<void> {
 
   const targetDir = parsed.positionals[0];
   if (!targetDir) {
-    throw new Error('init requires a target directory. Run "openclaw-skillkit help init" for examples.');
+    throw new Error('init requires a target directory. Run "skillforge help init" for examples.');
   }
 
   const resourcesValue = getFlag(parsed, "resources");
@@ -89,8 +89,8 @@ async function handleInit(parsed: ReturnType<typeof parseArgs>): Promise<void> {
   console.log(`Reference example: ${result.exampleSkill}`);
   console.log("Next:");
   console.log(`  1. Add real instructions to ${result.skillFile}`);
-  console.log(`  2. Validate: openclaw-skillkit lint ${result.skillDir}`);
-  console.log(`  3. Package when clean: openclaw-skillkit pack ${result.skillDir}`);
+  console.log(`  2. Validate: skillforge lint ${result.skillDir}`);
+  console.log(`  3. Package when clean: skillforge pack ${result.skillDir}`);
 }
 
 async function handleLint(parsed: ReturnType<typeof parseArgs>): Promise<void> {
@@ -125,7 +125,7 @@ async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void
 
   const archivePath = parsed.positionals[0];
   if (!archivePath) {
-    throw new Error('inspect requires a .skill archive path. Run "openclaw-skillkit help inspect" for examples.');
+    throw new Error('inspect requires a .skill archive path. Run "skillforge help inspect" for examples.');
   }
 
   await runInspect(archivePath, {
@@ -202,131 +202,131 @@ function assertArgumentCount(parsed: ReturnType<typeof parseArgs>, max: number, 
 
 function printHelp(command = "overview"): void {
   if (command === "init") {
-    console.log(`openclaw-skillkit init
+    console.log(`skillforge init
 
 Scaffold a ready-to-edit skill directory.
 
 Usage:
-  openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
+  skillforge init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
 
 Examples:
-  openclaw-skillkit init skills/customer-support --template scripts
-  openclaw-skillkit init skills/customer-support --template full
-  openclaw-skillkit init ./skill --name customer-support --description "Skill for triage workflows"
+  skillforge init skills/customer-support --template scripts
+  skillforge init skills/customer-support --template full
+  skillforge init ./skill --name customer-support --description "Skill for triage workflows"
 `);
     return;
   }
 
   if (command === "lint") {
-    console.log(`openclaw-skillkit lint
+    console.log(`skillforge lint
 
 Validate a skill directory for packaging and review.
 
 Usage:
-  openclaw-skillkit lint [dir] [--all] [--report [./reports/lint-all.report.md]] [--json|--format text|json]
+  skillforge lint [dir] [--all] [--report [./reports/lint-all.report.md]] [--json|--format text|json]
 
 Examples:
-  openclaw-skillkit lint
-  openclaw-skillkit lint --json
-  openclaw-skillkit lint examples/weather-research-skill
-  openclaw-skillkit lint skills --all
-  openclaw-skillkit lint skills --all --report
+  skillforge lint
+  skillforge lint --json
+  skillforge lint examples/weather-research-skill
+  skillforge lint skills --all
+  skillforge lint skills --all --report
 `);
     return;
   }
 
   if (command === "pack") {
-    console.log(`openclaw-skillkit pack
+    console.log(`skillforge pack
 
 Create a .skill archive after lint passes.
 
   Usage:
-  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  skillforge pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
 
 Examples:
-  openclaw-skillkit pack
-  openclaw-skillkit pack skills/customer-support
-  openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support
-  openclaw-skillkit pack skills/customer-support --output ./artifacts/customer-support.skill
-  openclaw-skillkit pack skills/customer-support --report
+  skillforge pack
+  skillforge pack skills/customer-support
+  skillforge pack skills/customer-support --output ./artifacts/customer-support
+  skillforge pack skills/customer-support --output ./artifacts/customer-support.skill
+  skillforge pack skills/customer-support --report
 `);
     return;
   }
 
   if (command === "inspect") {
-    console.log(`openclaw-skillkit inspect
+    console.log(`skillforge inspect
 
 Inspect a packaged .skill archive and print the embedded manifest.
 
 Usage:
-  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./artifacts/customer-support.report.md]] [--json|--format text|json]
+  skillforge inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./artifacts/customer-support.report.md]] [--json|--format text|json]
 
 Examples:
-  openclaw-skillkit inspect ./artifacts/customer-support.skill
-  openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support
-  openclaw-skillkit inspect ./artifacts/customer-support.skill --against ./artifacts/customer-support-prev.skill
-  openclaw-skillkit inspect ./artifacts/customer-support.skill --entry SKILL.md
-  openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
-  openclaw-skillkit inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
-  openclaw-skillkit inspect ./artifacts/customer-support.skill --json
+  skillforge inspect ./artifacts/customer-support.skill
+  skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support
+  skillforge inspect ./artifacts/customer-support.skill --against ./artifacts/customer-support-prev.skill
+  skillforge inspect ./artifacts/customer-support.skill --entry SKILL.md
+  skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
+  skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
+  skillforge inspect ./artifacts/customer-support.skill --json
 `);
     return;
   }
 
   if (command === "review") {
-    console.log(`openclaw-skillkit review
+    console.log(`skillforge review
 
 Run a release-readiness review for a skill directory.
 
 Usage:
-  openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
-  openclaw-skillkit review [dir] --all [--output-dir ./.openclaw-skillkit/review-artifacts] [--baseline-dir ./released-skills] [--report [./reports/review-all.report.md]] [--json|--format text|json]
+  skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
+  skillforge review [dir] --all [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--report [./reports/review-all.report.md]] [--json|--format text|json]
 
 Examples:
-  openclaw-skillkit review
-  openclaw-skillkit review skills/customer-support
-  openclaw-skillkit review skills/customer-support --against ./artifacts/customer-support-prev.skill
-  openclaw-skillkit review skills/customer-support --output ./artifacts/customer-support.skill --report
-  openclaw-skillkit review skills --all
-  openclaw-skillkit review skills --all --output-dir ./artifacts/review
-  openclaw-skillkit review skills --all --baseline-dir ./released-skills --report
-  openclaw-skillkit review skills/customer-support --json
+  skillforge review
+  skillforge review skills/customer-support
+  skillforge review skills/customer-support --against ./artifacts/customer-support-prev.skill
+  skillforge review skills/customer-support --output ./artifacts/customer-support.skill --report
+  skillforge review skills --all
+  skillforge review skills --all --output-dir ./artifacts/review
+  skillforge review skills --all --baseline-dir ./released-skills --report
+  skillforge review skills/customer-support --json
 `);
     return;
   }
 
   if (command === "serve") {
-    console.log(`openclaw-skillkit serve
+    console.log(`skillforge serve
 
-Run the local OpenClaw Skill Studio web interface.
+Run the local SkillForge Studio web interface.
 
 Usage:
-  openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
+  skillforge serve [--host 127.0.0.1] [--port 3210]
 
 Examples:
-  openclaw-skillkit serve
-  openclaw-skillkit serve --port 4310
-  openclaw-skillkit serve --host 0.0.0.0 --port 3210
+  skillforge serve
+  skillforge serve --port 4310
+  skillforge serve --host 0.0.0.0 --port 3210
 `);
     return;
   }
 
-  console.log(`openclaw-skillkit
+  console.log(`skillforge
 
-Build, lint, and pack OpenClaw skills.
+Author, validate, package, inspect, and review reusable skills.
 
 Usage:
-  openclaw-skillkit init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
-  openclaw-skillkit lint [dir] [--all] [--report [./reports/lint-all.report.md]] [--json|--format text|json]
-  openclaw-skillkit pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
-  openclaw-skillkit inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
-  openclaw-skillkit review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.openclaw-skillkit/review-artifacts] [--baseline-dir ./released-skills] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
-  openclaw-skillkit serve [--host 127.0.0.1] [--port 3210]
+  skillforge init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
+  skillforge lint [dir] [--all] [--report [./reports/lint-all.report.md]] [--json|--format text|json]
+  skillforge pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  skillforge inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
+  skillforge serve [--host 127.0.0.1] [--port 3210]
 
 Help:
-  openclaw-skillkit help
-  openclaw-skillkit help <command>
-  openclaw-skillkit <command> --help
+  skillforge help
+  skillforge help <command>
+  skillforge <command> --help
 `);
 }
 

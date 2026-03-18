@@ -103,17 +103,17 @@ async function runInspect(archivePath, options) {
         }
     }
     if (!hasComparison(inspected)) {
-        console.log(`  Next: run openclaw-skillkit inspect ${inspected.archivePath} --source ./path-to-skill to check for drift.`);
+        console.log(`  Next: run skillforge inspect ${inspected.archivePath} --source ./path-to-skill to check for drift.`);
     }
     if (!hasReleaseComparison(inspected)) {
-        console.log(`  Release history: run openclaw-skillkit inspect ${inspected.archivePath} --against ./previous-release.skill to compare against a prior artifact.`);
+        console.log(`  Release history: run skillforge inspect ${inspected.archivePath} --against ./previous-release.skill to compare against a prior artifact.`);
     }
     if (inspected.entryPreview) {
         console.log(`  Entry preview: ${inspected.entryPreview.path} (${inspected.entryPreview.text ? "text" : "binary"})`);
         console.log(inspected.entryPreview.preview);
     }
     else {
-        console.log(`  Entry preview: run openclaw-skillkit inspect ${inspected.archivePath} --entry SKILL.md to inspect a bundled file.`);
+        console.log(`  Entry preview: run skillforge inspect ${inspected.archivePath} --entry SKILL.md to inspect a bundled file.`);
     }
     if (reportPath) {
         console.log(`  Report: ${reportPath}`);

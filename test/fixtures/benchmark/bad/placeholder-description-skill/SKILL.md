@@ -1,6 +1,6 @@
 ---
 name: placeholder-description-skill
-description: OpenClaw skill for placeholder-description-skill.
+description: SkillForge skill for placeholder-description-skill.
 version: 1.0.0
 ---
 

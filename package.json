@@ -1,11 +1,11 @@
 {
-  "name": "openclaw-skillkit",
+  "name": "skillforge",
   "version": "0.1.0",
-  "description": "Author, lint, package, inspect, and demo OpenClaw skills with aligned CLI and Studio workflows.",
+  "description": "Author, validate, package, inspect, and review reusable skills with aligned CLI and Studio workflows.",
   "license": "MIT",
   "type": "commonjs",
   "bin": {
-    "openclaw-skillkit": "dist/cli.js"
+    "skillforge": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -27,10 +27,12 @@
     "ui": "node dist/cli.js serve"
   },
   "keywords": [
-    "openclaw",
+    "skillforge",
     "skills",
     "cli",
-    "toolkit"
+    "toolkit",
+    "validation",
+    "packaging"
   ],
   "engines": {
     "node": ">=22"

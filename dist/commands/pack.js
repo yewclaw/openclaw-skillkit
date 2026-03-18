@@ -54,8 +54,8 @@ function printArchiveSummary(destination, archiveSize, manifest, reportPath) {
     console.log("  Confidence: the archive includes an embedded manifest for later inspection.");
     console.log(`  Contents: ${manifest.entries.map((entry) => entry.path).join(", ")}`);
     console.log("Next:");
-    console.log(`  1. Inspect the shipped artifact: openclaw-skillkit inspect ${destination}`);
-    console.log(`  2. Verify source parity: openclaw-skillkit inspect ${destination} --source ./path-to-skill`);
+    console.log(`  1. Inspect the shipped artifact: skillforge inspect ${destination}`);
+    console.log(`  2. Verify source parity: skillforge inspect ${destination} --source ./path-to-skill`);
     if (reportPath) {
         console.log(`  Report: ${reportPath}`);
     }
