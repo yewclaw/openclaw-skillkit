@@ -21,7 +21,7 @@
 | `init` | Generate a consistent skill layout with optional `references/`, `scripts/`, and `assets/`. |
 | `lint` | Catch weak metadata, placeholder copy, missing sections, and broken local references, with `--all` repo-wide validation for multi-skill maintenance. |
 | `pack` | Create a `.skill` archive only after validation passes, with a manifest and optional release report for inspection. |
-| `inspect` | Read a packaged archive back out, verify exactly what it contains, preview bundled files, and optionally export a handoff report. |
+| `inspect` | Read one archive or a whole artifact directory back out, verify contents, preview bundled files, compare against prior releases, and export audit-ready reports. |
 | `review` | Run a release-readiness pass for one skill or a whole repo, package clean artifacts, verify source parity, optionally compare against prior releases, and emit handoff-ready reports. |
 | `serve` | Launch SkillForge Studio for demos, examples, linting, packaging, and archive inspection. |
 | `benchmark` | Measure fixture detection quality and CLI round-trip performance with repeatable runs. |
@@ -294,6 +294,8 @@ skillforge inspect ./artifacts/customer-support.skill --against ./artifacts/cust
 skillforge inspect ./artifacts/customer-support.skill --entry SKILL.md
 skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
 skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
+skillforge inspect ./released-skills --all
+skillforge inspect ./released-skills --all --baseline-dir ./previous-releases --report
 skillforge inspect ./artifacts/customer-support.skill --json
 ```
 
@@ -318,6 +320,14 @@ That release-delta view is available in the same text, JSON, Studio, and Markdow
 Adding `--entry` previews one bundled file directly from the archive so you can inspect `SKILL.md`, a guide in `references/`, or a shipped script without unpacking the artifact first.
 
 Adding `--report` exports the same inspection as a Markdown review artifact that is easier to attach to release notes, share in PRs, or hand to reviewers who do not want raw JSON.
+
+For maintainers auditing a release directory, `inspect --all` walks every `.skill` archive under a root path and produces a repo-scale artifact inventory. That batch view highlights:
+
+- duplicate release coordinates such as the same `name@version` shipped multiple times
+- skill names that span multiple versions across one archive set
+- the largest archives and largest bundled files
+- common bundled paths across releases, which helps spot repeated heavy content
+- optional baseline coverage, release-change hotspots, and orphaned prior artifacts when used with `--baseline-dir`
 
 ### 5. Run a release-readiness review before handoff
 
@@ -360,7 +370,7 @@ The result is still one compact scorecard, but it reduces the manual digging tha
 | `skillforge help init` | Show scaffold options and flags. |
 | `skillforge help lint` | Show lint modes, including JSON output, repo-wide `--all`, and report export. |
 | `skillforge help pack` | Show packaging behavior, output options, JSON reporting, and report export. |
-| `skillforge help inspect` | Show artifact inspection, source drift comparison, entry preview, release delta comparison, and report export usage. |
+| `skillforge help inspect` | Show single-archive inspection plus repo-scale archive inventory, baseline comparison, entry preview, and report export usage. |
 | `skillforge help review` | Show single-skill and repo-scale review workflows, including baseline comparison and report export usage. |
 | `skillforge help serve` | Show local studio host and port options. |
 | `skillforge serve` | Start SkillForge Studio. |

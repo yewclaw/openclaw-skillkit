@@ -120,18 +120,31 @@ async function handlePack(parsed: ReturnType<typeof parseArgs>): Promise<void> {
 }
 
 async function handleInspect(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["format", "json", "source", "against", "report", "entry"]);
+  assertNoUnexpectedFlags(parsed, ["format", "json", "source", "against", "report", "entry", "all", "baseline-dir"]);
   assertArgumentCount(parsed, 1, "inspect expects exactly 1 archive path.");
 
   const archivePath = parsed.positionals[0];
   if (!archivePath) {
-    throw new Error('inspect requires a .skill archive path. Run "skillforge help inspect" for examples.');
+    throw new Error('inspect requires an archive path or archive directory. Run "skillforge help inspect" for examples.');
+  }
+
+  const batchMode = getFlag(parsed, "all") === true;
+  if (batchMode && typeof getFlag(parsed, "source") === "string") {
+    throw new Error('inspect --all does not support --source. Inspect individual archives when checking source drift.');
+  }
+  if (batchMode && typeof getFlag(parsed, "against") === "string") {
+    throw new Error('inspect --all does not support --against. Use --baseline-dir to match each archive against a baseline archive directory.');
+  }
+  if (batchMode && typeof getFlag(parsed, "entry") === "string") {
+    throw new Error('inspect --all does not support --entry. Inspect an individual archive when previewing bundled files.');
   }
 
   await runInspect(archivePath, {
     format: parseMachineFormat(parsed, "inspect"),
+    all: batchMode,
     sourceDir: typeof getFlag(parsed, "source") === "string" ? String(getFlag(parsed, "source")) : undefined,
     baselineArchivePath: typeof getFlag(parsed, "against") === "string" ? String(getFlag(parsed, "against")) : undefined,
+    baselineDir: typeof getFlag(parsed, "baseline-dir") === "string" ? String(getFlag(parsed, "baseline-dir")) : undefined,
     reportPath: parseOptionalPathFlag(parsed, "report"),
     entryPath: typeof getFlag(parsed, "entry") === "string" ? String(getFlag(parsed, "entry")) : undefined
   });
@@ -260,6 +273,7 @@ Inspect a packaged .skill archive and print the embedded manifest.
 
 Usage:
   skillforge inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./artifacts/customer-support.report.md]] [--json|--format text|json]
+  skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
 
 Examples:
   skillforge inspect ./artifacts/customer-support.skill
@@ -268,6 +282,8 @@ Examples:
   skillforge inspect ./artifacts/customer-support.skill --entry SKILL.md
   skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --against ./artifacts/customer-support-prev.skill
   skillforge inspect ./artifacts/customer-support.skill --source ./skills/customer-support --report
+  skillforge inspect ./released-skills --all
+  skillforge inspect ./released-skills --all --baseline-dir ./previous-releases --report
   skillforge inspect ./artifacts/customer-support.skill --json
 `);
     return;
@@ -320,6 +336,7 @@ Usage:
   skillforge lint [dir] [--all] [--report [./reports/lint-all.report.md]] [--json|--format text|json]
   skillforge pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   skillforge inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
   skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
   skillforge serve [--host 127.0.0.1] [--port 3210]
 

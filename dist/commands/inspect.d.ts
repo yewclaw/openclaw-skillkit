@@ -1,7 +1,9 @@
 export interface RunInspectOptions {
     format: "text" | "json";
+    all?: boolean;
     sourceDir?: string;
     baselineArchivePath?: string;
+    baselineDir?: string;
     reportPath?: string | boolean;
     entryPath?: string;
 }
