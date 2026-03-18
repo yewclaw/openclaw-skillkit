@@ -695,7 +695,15 @@ serialTest("cli review --all runs repo-scale readiness checks and writes batch a
   assert.equal(payload.summary.ready, 1);
   assert.equal(payload.summary.notReady, 1);
   assert.equal(payload.summary.archiveDrift, 0);
+  assert.equal(payload.summary.artifactsCreated, 1);
+  assert.equal(payload.summary.artifactEntries, 4);
+  assert.equal(payload.artifactSummary.totalArchives, 1);
+  assert.equal(payload.artifactSummary.totalEntries, 4);
+  assert.equal(payload.artifactSummary.largestArchives[0].relativeDir, "weather");
+  assert.equal(payload.maintenanceSummary.issueHotspots[0].code, "invalid-frontmatter-version");
   assert.match(payload.reportMarkdown, /# OpenClaw Skill Batch Review Report/);
+  assert.match(payload.reportMarkdown, /## Artifact Inventory/);
+  assert.match(payload.reportMarkdown, /## Issue Hotspots/);
   assert.deepEqual(
     payload.skills.map((entry) => entry.relativeDir).sort(),
     ["broken", "weather"]
@@ -710,6 +718,7 @@ serialTest("cli review --all runs repo-scale readiness checks and writes batch a
   const report = await fs.readFile(reportPath, "utf8");
   assert.match(report, /### weather/);
   assert.match(report, /### broken/);
+  assert.match(report, /### Largest Archives/);
 });
 
 serialTest("cli review --all can match baseline archives from a directory", async () => {
@@ -718,13 +727,38 @@ serialTest("cli review --all can match baseline archives from a directory", asyn
   const baselinesDir = path.join(tempDir, "baselines");
   const artifactsDir = path.join(tempDir, "artifacts");
   const weatherDir = path.join(skillsRoot, "weather");
+  const alertsDir = path.join(skillsRoot, "alerts");
   await copyFixture(path.join("valid", "basic-skill"), weatherDir);
+  await copyFixture(path.join("valid", "basic-skill"), alertsDir);
   await fs.mkdir(baselinesDir, { recursive: true });
 
   let result = await runCli(["pack", weatherDir, "--output", path.join(baselinesDir, "weather-research.skill")]);
   assert.equal(result.code, 0, result.stderr);
+  result = await runCli(["pack", alertsDir, "--output", path.join(baselinesDir, "unused-baseline.skill")]);
+  assert.equal(result.code, 0, result.stderr);
 
   await fs.appendFile(path.join(weatherDir, "references", "README.md"), "\nChanged after baseline.\n");
+  await fs.writeFile(
+    path.join(alertsDir, "SKILL.md"),
+    `---
+name: alerts-skill
+description: Batch review should flag missing baselines and orphaned releases.
+version: 1.0.0
+---
+
+# Alerts Skill
+
+## Purpose
+Exercise baseline coverage reporting.
+
+## Workflow
+1. Review the current skill state.
+2. Compare it against a known baseline when available.
+
+## Constraints
+- Keep the release report concise.
+`
+  );
 
   result = await runCli([
     "review",
@@ -741,10 +775,19 @@ serialTest("cli review --all can match baseline archives from a directory", asyn
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.summary.baselineCompared, 1);
   assert.equal(payload.summary.releaseChanged, 1);
-  assert.equal(payload.summary.baselineMissing, 0);
+  assert.equal(payload.summary.baselineMissing, 1);
+  assert.equal(payload.baselineSummary.compared, 1);
+  assert.equal(payload.baselineSummary.changed, 1);
+  assert.deepEqual(payload.baselineSummary.missingSkills, ["alerts"]);
+  assert.equal(payload.baselineSummary.orphanedArchives.length, 1);
+  assert.match(payload.baselineSummary.orphanedArchives[0], /unused-baseline\.skill$/);
+  assert.match(payload.reportMarkdown, /## Baseline Coverage/);
+  assert.match(payload.reportMarkdown, /### Orphaned Baselines/);
   const weather = payload.skills.find((entry) => entry.relativeDir === "weather");
+  const alerts = payload.skills.find((entry) => entry.relativeDir === "alerts");
   assert.match(weather.baselineLookup.resolvedArchivePath, /weather-research\.skill$/);
   assert.equal(weather.archive.releaseComparison.matches, false);
+  assert.equal(alerts.baselineLookup.resolvedArchivePath, undefined);
 });
 
 serialTest("cli review --all rejects single-skill artifact flags", async () => {

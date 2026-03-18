@@ -343,7 +343,14 @@ If blocking lint errors remain, `review` exits non-zero and does not create an a
 
 For multi-skill repos, `review --all` closes the gap between batch lint and real release prep. It discovers every skill under the target root, writes review artifacts into one directory, keeps going even when some skills are blocked, and produces a rollup that answers which skills are ready, which still need work, and which changed versus a baseline release directory.
 
-That review output now includes a small release scorecard across CLI, Studio, JSON, and exported Markdown so the handoff answer is explicit: what passed, what needs attention, and whether the shipped artifact is still trustworthy.
+That batch review output now also includes maintainer-focused rollups across CLI, JSON, and exported Markdown:
+
+- artifact inventory totals such as archives created, bundled file counts, total bytes, and the largest review artifacts
+- release hotspots that show which bundled paths and metadata fields changed most often across the repo
+- issue hotspots that surface the most common lint failures without reading every per-skill section
+- baseline coverage reporting that calls out missing baselines and orphaned release artifacts sitting in the baseline directory
+
+The result is still one compact scorecard, but it reduces the manual digging that usually happens before repo-wide release handoff.
 
 ## Commands
 
@@ -377,7 +384,7 @@ The repo keeps the trust boundary explicit:
 - `pack` is gated by lint, so broken skills do not get archived by accident
 - packaged archives include skill metadata plus per-file sizes and hashes, and avoid recursively bundling old `.skill` artifacts
 - `inspect` lets authors and reviewers confirm the manifest from the built artifact itself, compare it against the current source directory for drift, compare it against a previous shipped artifact for release deltas, preview bundled files, and export a review-ready Markdown report
-- `review` provides a single readiness verdict for one skill or a whole repo, covering lint status, archive creation, source-to-artifact parity, and optional release delta review before handoff
+- `review` provides a single readiness verdict for one skill or a whole repo, covering lint status, archive creation, source-to-artifact parity, release hotspots, artifact inventory, and optional baseline coverage / release delta review before handoff
 - fixture-driven tests cover parsing, linting, CLI behavior, and archive contents
 - `npm run verify` runs tests and benchmarks, and also typechecks plus rebuilds `dist/` when the local TypeScript compiler is available
 - GitHub Actions runs the same `npm run verify` command on pushes and pull requests

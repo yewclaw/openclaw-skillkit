@@ -47,6 +47,12 @@ interface BatchReviewedSkill {
     destination: string;
     archiveSizeBytes: number;
     archiveSizeLabel: string;
+    entryCount: number;
+    totalBytes: number;
+    largestEntry?: {
+      path: string;
+      size: number;
+    };
     comparison: {
       matches: boolean;
       matchedEntries: number;
@@ -60,6 +66,9 @@ interface BatchReviewedSkill {
       addedEntries: string[];
       removedEntries: string[];
       changedEntries: Array<{ path: string }>;
+      metadataDifferences: Array<{
+        field: "name" | "description" | "version";
+      }>;
     };
   };
   baselineLookup?: {
@@ -80,9 +89,58 @@ interface BatchReviewResult {
     lintErrors: number;
     lintWarnings: number;
     archiveDrift: number;
+    artifactsCreated: number;
+    artifactBytes: number;
+    artifactEntries: number;
     baselineCompared: number;
     releaseChanged: number;
     baselineMissing: number;
+  };
+  artifactSummary: {
+    totalArchives: number;
+    totalBytes: number;
+    totalEntries: number;
+    averageArchiveSizeBytes: number;
+    averageEntriesPerArchive: number;
+    largestArchives: Array<{
+      relativeDir: string;
+      archivePath: string;
+      archiveSizeBytes: number;
+      entryCount: number;
+    }>;
+    largestEntries: Array<{
+      relativeDir: string;
+      path: string;
+      size: number;
+    }>;
+  };
+  maintenanceSummary: {
+    issueHotspots: Array<{
+      code: string;
+      count: number;
+      skills: string[];
+    }>;
+  };
+  releaseSummary?: {
+    changedPaths: Array<{
+      path: string;
+      count: number;
+      changeKinds: string[];
+      skills: string[];
+    }>;
+    metadataHotspots: Array<{
+      field: "name" | "description" | "version";
+      count: number;
+      skills: string[];
+    }>;
+  };
+  baselineSummary?: {
+    requestedDir: string;
+    compared: number;
+    changed: number;
+    unchanged: number;
+    missingSkills: string[];
+    orphanedArchives: string[];
   };
   skills: BatchReviewedSkill[];
 }
@@ -182,6 +240,9 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
     const outputPath = resolveBatchOutputPath(artifactDir, relativeDir);
     const baselineLookup = await resolveBatchBaselineArchive(options.baselineDir, rootDir, relativeDir, name);
     const review = await reviewSkill(skillDir, outputPath, baselineLookup?.resolvedArchivePath);
+    const largestEntry = review.archive?.manifest.entries
+      .slice()
+      .sort((left, right) => right.size - left.size || left.path.localeCompare(right.path))[0];
     skills.push({
       skillDir,
       relativeDir,
@@ -194,6 +255,14 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
             destination: review.archive.destination,
             archiveSizeBytes: review.archive.archiveSizeBytes,
             archiveSizeLabel: review.archive.archiveSizeLabel,
+            entryCount: review.archive.manifest.entryCount,
+            totalBytes: review.archive.manifest.totalBytes,
+            largestEntry: largestEntry
+              ? {
+                  path: largestEntry.path,
+                  size: largestEntry.size
+                }
+              : undefined,
             comparison: {
               matches: review.archive.comparison.matches,
               matchedEntries: review.archive.comparison.matchedEntries,
@@ -207,6 +276,9 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
                   baselineEntryCount: review.archive.releaseComparison.baselineEntryCount,
                   addedEntries: review.archive.releaseComparison.addedEntries,
                   removedEntries: review.archive.releaseComparison.removedEntries,
+                  metadataDifferences: review.archive.releaseComparison.metadataDifferences.map((difference) => ({
+                    field: difference.field
+                  })),
                   changedEntries: review.archive.releaseComparison.changedEntries.map((entry) => ({
                     path: entry.path
                   }))
@@ -218,7 +290,7 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
     });
   }
 
-  const result = summarizeBatchReview(rootDir, artifactDir, options.baselineDir, skills);
+  const result = await summarizeBatchReview(rootDir, artifactDir, options.baselineDir, skills);
   const reportPath = await writeBatchReviewReport(result, options.reportPath);
   const reportMarkdown = buildBatchReviewReport(result);
 
@@ -231,6 +303,10 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
           baselineDir: result.baselineDir,
           skillCount: result.skillCount,
           summary: result.summary,
+          artifactSummary: result.artifactSummary,
+          maintenanceSummary: result.maintenanceSummary,
+          releaseHotspots: result.releaseSummary,
+          baselineSummary: result.baselineSummary,
           reportPath,
           reportMarkdown,
           skills: result.skills
@@ -290,10 +366,41 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
   console.log(`  Ready with warnings: ${result.summary.readyWithWarnings}`);
   console.log(`  Not ready: ${result.summary.notReady}`);
   console.log(`  Artifact drift detected: ${result.summary.archiveDrift}`);
+  console.log(
+    `  Artifacts created: ${result.summary.artifactsCreated} (${result.artifactSummary.totalEntries} bundled files, ${formatBytes(result.artifactSummary.totalBytes)} total)`
+  );
   if (result.baselineDir) {
     console.log(`  Baselines compared: ${result.summary.baselineCompared}`);
     console.log(`  Release changes detected: ${result.summary.releaseChanged}`);
     console.log(`  Baselines missing: ${result.summary.baselineMissing}`);
+  }
+  if (result.artifactSummary.largestArchives.length > 0) {
+    console.log("Artifact inventory:");
+    for (const archive of result.artifactSummary.largestArchives) {
+      console.log(
+        `  ${archive.relativeDir}: ${formatBytes(archive.archiveSizeBytes)} across ${archive.entryCount} file(s) -> ${archive.archivePath}`
+      );
+    }
+  }
+  if (result.releaseSummary && result.releaseSummary.changedPaths.length > 0) {
+    console.log("Release hotspots:");
+    for (const hotspot of result.releaseSummary.changedPaths) {
+      console.log(
+        `  ${hotspot.path}: touched in ${hotspot.count} skill(s) [${hotspot.changeKinds.join(", ")}]`
+      );
+    }
+  }
+  if (result.maintenanceSummary.issueHotspots.length > 0) {
+    console.log("Issue hotspots:");
+    for (const hotspot of result.maintenanceSummary.issueHotspots) {
+      console.log(`  ${hotspot.code}: ${hotspot.count} issue(s) across ${hotspot.skills.join(", ")}`);
+    }
+  }
+  if (result.baselineSummary?.orphanedArchives.length) {
+    console.log("Orphaned baselines:");
+    for (const archive of result.baselineSummary.orphanedArchives) {
+      console.log(`  ${archive}`);
+    }
   }
   if (reportPath) {
     console.log(`Report: ${reportPath}`);
@@ -363,12 +470,12 @@ function printSingleReview(
   }
 }
 
-function summarizeBatchReview(
+async function summarizeBatchReview(
   rootDir: string,
   artifactDir: string,
   baselineDir: string | undefined,
   skills: BatchReviewedSkill[]
-): BatchReviewResult {
+): Promise<BatchReviewResult> {
   const summary = {
     ready: 0,
     readyWithWarnings: 0,
@@ -376,10 +483,17 @@ function summarizeBatchReview(
     lintErrors: 0,
     lintWarnings: 0,
     archiveDrift: 0,
+    artifactsCreated: 0,
+    artifactBytes: 0,
+    artifactEntries: 0,
     baselineCompared: 0,
     releaseChanged: 0,
     baselineMissing: 0
   };
+  const issueCounts = new Map<string, { count: number; skills: Set<string> }>();
+  const changedPathCounts = new Map<string, { count: number; skills: Set<string>; changeKinds: Set<string> }>();
+  const metadataCounts = new Map<"name" | "description" | "version", { count: number; skills: Set<string> }>();
+  const matchedBaselineArchives = new Set<string>();
 
   for (const skill of skills) {
     if (skill.readiness === "ready") {
@@ -392,20 +506,137 @@ function summarizeBatchReview(
 
     summary.lintErrors += skill.lint.summary.errors;
     summary.lintWarnings += skill.lint.summary.warnings;
+    for (const issue of skill.lint.issues) {
+      const current = issueCounts.get(issue.code) ?? { count: 0, skills: new Set<string>() };
+      current.count += 1;
+      current.skills.add(skill.relativeDir);
+      issueCounts.set(issue.code, current);
+    }
 
     if (skill.archive && !skill.archive.comparison.matches) {
       summary.archiveDrift += 1;
     }
+    if (skill.archive) {
+      summary.artifactsCreated += 1;
+      summary.artifactBytes += skill.archive.archiveSizeBytes;
+      summary.artifactEntries += skill.archive.entryCount;
+    }
 
     if (skill.archive?.releaseComparison) {
       summary.baselineCompared += 1;
+      matchedBaselineArchives.add(path.resolve(skill.archive.releaseComparison.baselineArchivePath));
       if (!skill.archive.releaseComparison.matches) {
         summary.releaseChanged += 1;
+      }
+      for (const entry of skill.archive.releaseComparison.changedEntries) {
+        const current = changedPathCounts.get(entry.path) ?? {
+          count: 0,
+          skills: new Set<string>(),
+          changeKinds: new Set<string>()
+        };
+        current.count += 1;
+        current.skills.add(skill.relativeDir);
+        current.changeKinds.add("changed");
+        changedPathCounts.set(entry.path, current);
+      }
+      for (const entry of skill.archive.releaseComparison.addedEntries) {
+        const current = changedPathCounts.get(entry) ?? {
+          count: 0,
+          skills: new Set<string>(),
+          changeKinds: new Set<string>()
+        };
+        current.count += 1;
+        current.skills.add(skill.relativeDir);
+        current.changeKinds.add("added");
+        changedPathCounts.set(entry, current);
+      }
+      for (const entry of skill.archive.releaseComparison.removedEntries) {
+        const current = changedPathCounts.get(entry) ?? {
+          count: 0,
+          skills: new Set<string>(),
+          changeKinds: new Set<string>()
+        };
+        current.count += 1;
+        current.skills.add(skill.relativeDir);
+        current.changeKinds.add("removed");
+        changedPathCounts.set(entry, current);
+      }
+      for (const difference of skill.archive.releaseComparison.metadataDifferences ?? []) {
+        const current = metadataCounts.get(difference.field) ?? { count: 0, skills: new Set<string>() };
+        current.count += 1;
+        current.skills.add(skill.relativeDir);
+        metadataCounts.set(difference.field, current);
       }
     } else if (baselineDir && skill.baselineLookup && !skill.baselineLookup.resolvedArchivePath) {
       summary.baselineMissing += 1;
     }
   }
+
+  const totalArchives = skills.filter((skill) => skill.archive).length;
+  const largestArchives = skills
+    .filter((skill): skill is BatchReviewedSkill & { archive: NonNullable<BatchReviewedSkill["archive"]> } => Boolean(skill.archive))
+    .sort(
+      (left, right) =>
+        right.archive.archiveSizeBytes - left.archive.archiveSizeBytes || left.relativeDir.localeCompare(right.relativeDir)
+    )
+    .slice(0, 5)
+    .map((skill) => ({
+      relativeDir: skill.relativeDir,
+      archivePath: skill.archive.destination,
+      archiveSizeBytes: skill.archive.archiveSizeBytes,
+      entryCount: skill.archive.entryCount
+    }));
+  const largestEntries = skills
+    .filter(
+      (
+        skill
+      ): skill is BatchReviewedSkill & {
+        archive: NonNullable<BatchReviewedSkill["archive"]> & { largestEntry: NonNullable<BatchReviewedSkill["archive"]>["largestEntry"] };
+      } => Boolean(skill.archive?.largestEntry)
+    )
+    .sort(
+      (left, right) =>
+        (right.archive.largestEntry?.size ?? 0) - (left.archive.largestEntry?.size ?? 0) ||
+        left.relativeDir.localeCompare(right.relativeDir)
+    )
+    .slice(0, 5)
+    .map((skill) => ({
+      relativeDir: skill.relativeDir,
+      path: skill.archive.largestEntry?.path ?? "unknown",
+      size: skill.archive.largestEntry?.size ?? 0
+    }));
+  const issueHotspots = [...issueCounts.entries()]
+    .sort((left, right) => right[1].count - left[1].count || left[0].localeCompare(right[0]))
+    .slice(0, 5)
+    .map(([code, entry]) => ({
+      code,
+      count: entry.count,
+      skills: [...entry.skills].sort((left, right) => left.localeCompare(right))
+    }));
+  const releaseSummary =
+    changedPathCounts.size > 0 || metadataCounts.size > 0
+      ? {
+          changedPaths: [...changedPathCounts.entries()]
+            .sort((left, right) => right[1].count - left[1].count || left[0].localeCompare(right[0]))
+            .slice(0, 5)
+            .map(([changePath, entry]) => ({
+              path: changePath,
+              count: entry.count,
+              changeKinds: [...entry.changeKinds].sort((left, right) => left.localeCompare(right)),
+              skills: [...entry.skills].sort((left, right) => left.localeCompare(right))
+            })),
+          metadataHotspots: [...metadataCounts.entries()]
+            .sort((left, right) => right[1].count - left[1].count || left[0].localeCompare(right[0]))
+            .map(([field, entry]) => ({
+              field,
+              count: entry.count,
+              skills: [...entry.skills].sort((left, right) => left.localeCompare(right))
+            }))
+        }
+      : undefined;
+  const baselineSummary = baselineDir
+    ? await summarizeBaselineCoverage(path.resolve(baselineDir), skills, matchedBaselineArchives)
+    : undefined;
 
   return {
     rootDir,
@@ -413,6 +644,20 @@ function summarizeBatchReview(
     baselineDir: baselineDir ? path.resolve(baselineDir) : undefined,
     skillCount: skills.length,
     summary,
+    artifactSummary: {
+      totalArchives,
+      totalBytes: summary.artifactBytes,
+      totalEntries: summary.artifactEntries,
+      averageArchiveSizeBytes: totalArchives > 0 ? Math.round(summary.artifactBytes / totalArchives) : 0,
+      averageEntriesPerArchive: totalArchives > 0 ? Number((summary.artifactEntries / totalArchives).toFixed(1)) : 0,
+      largestArchives,
+      largestEntries
+    },
+    maintenanceSummary: {
+      issueHotspots
+    },
+    releaseSummary,
+    baselineSummary,
     skills: skills.sort((left, right) => left.relativeDir.localeCompare(right.relativeDir))
   };
 }
@@ -430,11 +675,79 @@ function buildBatchReviewReport(result: BatchReviewResult): string {
   lines.push(`- Lint errors: ${result.summary.lintErrors}`);
   lines.push(`- Lint warnings: ${result.summary.lintWarnings}`);
   lines.push(`- Artifact drift detected: ${result.summary.archiveDrift}`);
+  lines.push(`- Artifacts created: ${result.summary.artifactsCreated}`);
+  lines.push(`- Total artifact bytes: ${formatBytes(result.summary.artifactBytes)}`);
+  lines.push(`- Total bundled files: ${result.summary.artifactEntries}`);
   if (result.baselineDir) {
     lines.push(`- Baseline directory: \`${result.baselineDir}\``);
     lines.push(`- Baselines compared: ${result.summary.baselineCompared}`);
     lines.push(`- Release changes detected: ${result.summary.releaseChanged}`);
     lines.push(`- Baselines missing: ${result.summary.baselineMissing}`);
+  }
+  lines.push("");
+  lines.push("## Artifact Inventory");
+  lines.push("");
+  lines.push(`- Archives created: ${result.artifactSummary.totalArchives}`);
+  lines.push(`- Total size: ${formatBytes(result.artifactSummary.totalBytes)}`);
+  lines.push(`- Average archive size: ${formatBytes(result.artifactSummary.averageArchiveSizeBytes)}`);
+  lines.push(`- Average bundled files per archive: ${result.artifactSummary.averageEntriesPerArchive}`);
+  if (result.artifactSummary.largestArchives.length > 0) {
+    lines.push("", "### Largest Archives");
+    for (const archive of result.artifactSummary.largestArchives) {
+      lines.push(
+        `- ${archive.relativeDir}: ${formatBytes(archive.archiveSizeBytes)} across ${archive.entryCount} file(s) (\`${archive.archivePath}\`)`
+      );
+    }
+  }
+  if (result.artifactSummary.largestEntries.length > 0) {
+    lines.push("", "### Largest Bundled Entries");
+    for (const entry of result.artifactSummary.largestEntries) {
+      lines.push(`- ${entry.relativeDir}: \`${entry.path}\` (${formatBytes(entry.size)})`);
+    }
+  }
+  if (result.releaseSummary) {
+    lines.push("", "## Release Hotspots");
+    if (result.releaseSummary.changedPaths.length > 0) {
+      lines.push("", "### Most Changed Paths");
+      for (const hotspot of result.releaseSummary.changedPaths) {
+        lines.push(
+          `- \`${hotspot.path}\`: ${hotspot.count} skill(s), change kinds ${hotspot.changeKinds.join(", ")}, skills ${hotspot.skills.join(", ")}`
+        );
+      }
+    }
+    if (result.releaseSummary.metadataHotspots.length > 0) {
+      lines.push("", "### Metadata Churn");
+      for (const hotspot of result.releaseSummary.metadataHotspots) {
+        lines.push(`- ${hotspot.field}: ${hotspot.count} skill(s) (${hotspot.skills.join(", ")})`);
+      }
+    }
+  }
+  if (result.maintenanceSummary.issueHotspots.length > 0) {
+    lines.push("", "## Issue Hotspots");
+    for (const hotspot of result.maintenanceSummary.issueHotspots) {
+      lines.push(`- ${hotspot.code}: ${hotspot.count} issue(s) across ${hotspot.skills.join(", ")}`);
+    }
+  }
+  if (result.baselineSummary) {
+    lines.push("", "## Baseline Coverage");
+    lines.push(`- Requested directory: \`${result.baselineSummary.requestedDir}\``);
+    lines.push(`- Compared: ${result.baselineSummary.compared}`);
+    lines.push(`- Changed: ${result.baselineSummary.changed}`);
+    lines.push(`- Unchanged: ${result.baselineSummary.unchanged}`);
+    lines.push(`- Missing baselines: ${result.baselineSummary.missingSkills.length}`);
+    lines.push(`- Orphaned baseline archives: ${result.baselineSummary.orphanedArchives.length}`);
+    if (result.baselineSummary.missingSkills.length > 0) {
+      lines.push("", "### Missing Baselines");
+      for (const skill of result.baselineSummary.missingSkills) {
+        lines.push(`- ${skill}`);
+      }
+    }
+    if (result.baselineSummary.orphanedArchives.length > 0) {
+      lines.push("", "### Orphaned Baselines");
+      for (const archive of result.baselineSummary.orphanedArchives) {
+        lines.push(`- \`${archive}\``);
+      }
+    }
   }
   lines.push("");
   lines.push("## Skills");
@@ -484,6 +797,52 @@ function buildBatchReviewReport(result: BatchReviewResult): string {
   }
 
   return lines.join("\n");
+}
+
+async function summarizeBaselineCoverage(
+  requestedDir: string,
+  skills: BatchReviewedSkill[],
+  matchedBaselineArchives: Set<string>
+): Promise<NonNullable<BatchReviewResult["baselineSummary"]>> {
+  const baselineArchives = await listBaselineArchives(requestedDir);
+  const orphanedArchives = baselineArchives.filter((archive) => !matchedBaselineArchives.has(archive));
+
+  return {
+    requestedDir,
+    compared: skills.filter((skill) => Boolean(skill.archive?.releaseComparison)).length,
+    changed: skills.filter((skill) => skill.archive?.releaseComparison && !skill.archive.releaseComparison.matches).length,
+    unchanged: skills.filter((skill) => skill.archive?.releaseComparison?.matches).length,
+    missingSkills: skills
+      .filter((skill) => skill.baselineLookup?.requestedDir && !skill.baselineLookup.resolvedArchivePath)
+      .map((skill) => skill.relativeDir)
+      .sort((left, right) => left.localeCompare(right)),
+    orphanedArchives: orphanedArchives.sort((left, right) => left.localeCompare(right))
+  };
+}
+
+async function listBaselineArchives(rootDir: string): Promise<string[]> {
+  if (!(await exists(rootDir))) {
+    return [];
+  }
+
+  const results: string[] = [];
+
+  async function walk(currentDir: string): Promise<void> {
+    const entries = await readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(fullPath);
+        continue;
+      }
+      if (entry.isFile() && entry.name.endsWith(".skill")) {
+        results.push(path.resolve(fullPath));
+      }
+    }
+  }
+
+  await walk(rootDir);
+  return results;
 }
 
 async function writeBatchReviewReport(result: BatchReviewResult, reportPath?: string | boolean): Promise<string | undefined> {
@@ -623,4 +982,12 @@ function formatReviewReadinessMarkdown(readiness: ReviewReadiness): string {
     return "ready with warnings";
   }
   return "not ready";
+}
+
+function formatBytes(size: number): string {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  return `${(size / 1024).toFixed(1)} KB`;
 }
