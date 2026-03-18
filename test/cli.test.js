@@ -434,12 +434,79 @@ serialTest("cli pack rejects unsupported output extensions", async () => {
   assert.match(result.stderr, /Output must end with "\.skill"\. Received "\.\/artifact\.zip"\./);
 });
 
+serialTest("cli pack --all packages clean skills, blocks invalid ones, and writes an index", async () => {
+  const tempDir = await makeTempDir("skillforge-pack-all-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const artifactsDir = path.join(tempDir, "artifacts");
+  const reportPath = path.join(tempDir, "pack-all.md");
+  const indexPath = path.join(tempDir, "pack-all.json");
+  await copyFixture(path.join("valid", "basic-skill"), path.join(skillsRoot, "weather"));
+  await copyFixture(path.join("invalid", "bad-version-skill"), path.join(skillsRoot, "broken"));
+
+  const result = await runCli([
+    "pack",
+    skillsRoot,
+    "--all",
+    "--output-dir",
+    artifactsDir,
+    "--index",
+    indexPath,
+    "--report",
+    reportPath,
+    "--json"
+  ]);
+
+  assert.equal(result.code, 1);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.rootDir, skillsRoot);
+  assert.equal(payload.artifactDir, artifactsDir);
+  assert.equal(payload.skillCount, 2);
+  assert.equal(payload.summary.packaged, 1);
+  assert.equal(payload.summary.blocked, 1);
+  assert.equal(payload.summary.errors, 2);
+  assert.equal(payload.summary.warnings, 2);
+  assert.equal(payload.indexPath, indexPath);
+  assert.match(payload.reportMarkdown, /# SkillForge Batch Pack Report/);
+  assert.match(payload.reportMarkdown, /## Artifact Inventory/);
+  assert.match(payload.reportMarkdown, /## Maintenance Hotspots/);
+  const weather = payload.skills.find((entry) => entry.relativeDir === "weather");
+  const broken = payload.skills.find((entry) => entry.relativeDir === "broken");
+  assert.match(weather.archive.destination, /weather\.skill$/);
+  assert.equal(weather.archive.manifest.skill.name, "weather-research");
+  assert.equal(broken.archive, undefined);
+  assert.match(broken.issues[0].code, /invalid-frontmatter-version/);
+  await fs.access(path.join(artifactsDir, "weather.skill"));
+  await assert.rejects(fs.access(path.join(artifactsDir, "broken.skill")));
+  const report = await fs.readFile(reportPath, "utf8");
+  assert.match(report, /# SkillForge Batch Pack Report/);
+  const index = JSON.parse(await fs.readFile(indexPath, "utf8"));
+  assert.equal(index.summary.packaged, 1);
+});
+
+serialTest("cli pack --all blocks duplicate skill names across directories", async () => {
+  const tempDir = await makeTempDir("skillforge-pack-all-duplicate-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const firstDir = path.join(skillsRoot, "first");
+  const secondDir = path.join(skillsRoot, "second");
+  await copyFixture(path.join("valid", "basic-skill"), firstDir);
+  await copyFixture(path.join("valid", "basic-skill"), secondDir);
+
+  const result = await runCli(["pack", skillsRoot, "--all"]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /Duplicate names:/);
+  assert.match(result.stdout, /duplicate-skill-name/);
+  assert.match(result.stdout, /weather-research: 2 skill\(s\) \(first, second\)/);
+});
+
 serialTest("cli help supports command-specific output", async () => {
   const result = await runCli(["help", "pack"]);
 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /skillforge pack/);
   assert.match(result.stdout, /Create a \.skill archive after lint passes\./);
+  assert.match(result.stdout, /--output-dir \.\/\.skillforge\/pack-artifacts/);
+  assert.match(result.stdout, /--index \[\.\/artifacts\/batch-pack\.index\.json\]/);
   assert.match(result.stdout, /skillforge pack$/m);
 });
 
@@ -724,6 +791,17 @@ serialTest("cli inspect --all rejects single-archive-only flags", async () => {
 
   assert.equal(result.code, 1);
   assert.match(result.stderr, /inspect --all does not support --entry/);
+});
+
+serialTest("cli pack --all rejects single-skill output flag", async () => {
+  const tempDir = await makeTempDir("skillforge-pack-all-output-");
+  const skillsRoot = path.join(tempDir, "skills");
+  await copyFixture(path.join("valid", "basic-skill"), path.join(skillsRoot, "weather"));
+
+  const result = await runCli(["pack", skillsRoot, "--all", "--output", path.join(tempDir, "artifact.skill")]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /pack --all does not support --output\. Use --output-dir to control where batch artifacts are written\./);
 });
 
 serialTest("cli review packages a valid skill and reports readiness", async () => {

@@ -20,7 +20,7 @@
 | --- | --- |
 | `init` | Generate a consistent skill layout with optional `references/`, `scripts/`, and `assets/`. |
 | `lint` | Catch weak metadata, placeholder copy, missing sections, and broken local references, with `--all` repo-wide validation for multi-skill maintenance. |
-| `pack` | Create a `.skill` archive only after validation passes, with a manifest and optional release report for inspection. |
+| `pack` | Create a `.skill` archive only after validation passes, with a manifest, repo-wide batch packaging, and optional report or index outputs for inspection and automation. |
 | `inspect` | Read one archive or a whole artifact directory back out, verify contents, preview bundled files, compare against prior releases, and export audit-ready reports. |
 | `review` | Run a release-readiness pass for one skill or a whole repo, package clean artifacts, verify source parity, optionally compare against prior releases, and emit handoff-ready reports. |
 | `serve` | Launch SkillForge Studio for demos, examples, linting, packaging, and archive inspection. |
@@ -71,6 +71,7 @@ npx skillforge init skills/customer-support --template scripts
 $EDITOR skills/customer-support/SKILL.md
 npx skillforge lint skills/customer-support
 npx skillforge pack skills/customer-support --output ./artifacts/customer-support.skill
+npx skillforge pack skills --all --output-dir ./artifacts/release --index --report
 npx skillforge inspect ./artifacts/customer-support.skill
 npx skillforge review skills/customer-support --output ./artifacts/customer-support.skill --report
 ```
@@ -258,6 +259,7 @@ skillforge pack skills/customer-support
 skillforge pack skills/customer-support --output ./artifacts/customer-support.skill
 skillforge pack skills/customer-support --report
 skillforge pack skills/customer-support --output ./artifacts/customer-support.skill --json
+skillforge pack skills --all --output-dir ./artifacts/release --index --report
 ```
 
 If you are already inside a skill directory:
@@ -282,6 +284,15 @@ Next:
 Use `--report` to write a Markdown handoff summary next to the archive by default, or pass an explicit path such as `--report ./artifacts/customer-support.report.md`.
 
 `pack --json` emits archive metadata for CI artifacts, release automation, editor tooling, and release note pipelines. The JSON payload now also includes the generated report markdown and report path when requested.
+
+For maintainers packaging multiple skills at once, `pack --all` walks every skill under a root path, blocks only the skills with lint errors, and prevents duplicate frontmatter names from shipping in the same batch. Its text and JSON outputs add a lean operational view with:
+
+- packaged vs blocked skill counts
+- artifact inventory totals such as archive bytes, bundled file counts, and largest archives
+- issue hotspots across the repo so cleanup work is easier to prioritize
+- an optional persisted JSON index via `--index` for release scripts or downstream automation
+
+That gives teams a practical release-helper path when they want packaged artifacts and a machine-readable batch summary without running the fuller source-parity checks in `review --all`.
 
 ### 4. Inspect the final artifact before publishing
 
@@ -369,7 +380,7 @@ The result is still one compact scorecard, but it reduces the manual digging tha
 | `skillforge help` | Show CLI help. |
 | `skillforge help init` | Show scaffold options and flags. |
 | `skillforge help lint` | Show lint modes, including JSON output, repo-wide `--all`, and report export. |
-| `skillforge help pack` | Show packaging behavior, output options, JSON reporting, and report export. |
+| `skillforge help pack` | Show single-skill packaging plus repo-wide batch packaging, JSON reporting, index export, and report export. |
 | `skillforge help inspect` | Show single-archive inspection plus repo-scale archive inventory, baseline comparison, entry preview, and report export usage. |
 | `skillforge help review` | Show single-skill and repo-scale review workflows, including baseline comparison and report export usage. |
 | `skillforge help serve` | Show local studio host and port options. |
@@ -391,7 +402,7 @@ The result is still one compact scorecard, but it reduces the manual digging tha
 
 The repo keeps the trust boundary explicit:
 
-- `pack` is gated by lint, so broken skills do not get archived by accident
+- `pack` is gated by lint, so broken skills do not get archived by accident, and `pack --all` adds a lean repo-scale packaging flow with duplicate-name blocking and an optional batch index for automation
 - packaged archives include skill metadata plus per-file sizes and hashes, and avoid recursively bundling old `.skill` artifacts
 - `inspect` lets authors and reviewers confirm the manifest from the built artifact itself, compare it against the current source directory for drift, compare it against a previous shipped artifact for release deltas, preview bundled files, and export a review-ready Markdown report
 - `review` provides a single readiness verdict for one skill or a whole repo, covering lint status, archive creation, source-to-artifact parity, release hotspots, artifact inventory, and optional baseline coverage / release delta review before handoff

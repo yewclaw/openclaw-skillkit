@@ -108,13 +108,20 @@ async function handleLint(parsed: ReturnType<typeof parseArgs>): Promise<void> {
 }
 
 async function handlePack(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["output", "format", "json", "report"]);
+  assertNoUnexpectedFlags(parsed, ["output", "output-dir", "format", "json", "report", "all", "index"]);
   assertArgumentCount(parsed, 1, "pack expects exactly 1 target directory.");
 
   const targetDir = parsed.positionals[0] ?? ".";
+  const batchMode = getFlag(parsed, "all") === true;
+  if (batchMode && typeof getFlag(parsed, "output") === "string") {
+    throw new Error('pack --all does not support --output. Use --output-dir to control where batch artifacts are written.');
+  }
   await runPack(targetDir, {
     outputPath: typeof getFlag(parsed, "output") === "string" ? String(getFlag(parsed, "output")) : undefined,
+    outputDir: typeof getFlag(parsed, "output-dir") === "string" ? String(getFlag(parsed, "output-dir")) : undefined,
     format: parseMachineFormat(parsed, "pack"),
+    all: batchMode,
+    indexPath: parseOptionalPathFlag(parsed, "index"),
     reportPath: parseOptionalPathFlag(parsed, "report")
   });
 }
@@ -255,6 +262,7 @@ Create a .skill archive after lint passes.
 
   Usage:
   skillforge pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  skillforge pack [dir] --all [--output-dir ./.skillforge/pack-artifacts] [--index [./artifacts/batch-pack.index.json]] [--report [./reports/pack-all.report.md]] [--json|--format text|json]
 
 Examples:
   skillforge pack
@@ -262,6 +270,8 @@ Examples:
   skillforge pack skills/customer-support --output ./artifacts/customer-support
   skillforge pack skills/customer-support --output ./artifacts/customer-support.skill
   skillforge pack skills/customer-support --report
+  skillforge pack skills --all
+  skillforge pack skills --all --output-dir ./artifacts/release --index --report
 `);
     return;
   }
@@ -335,6 +345,7 @@ Usage:
   skillforge init <dir> [--name my-skill] [--description "Skill summary"] [--template minimal|references|scripts|full] [--resources references,scripts,assets] [--force]
   skillforge lint [dir] [--all] [--report [./reports/lint-all.report.md]] [--json|--format text|json]
   skillforge pack [dir] [--output ./dist/my-skill.skill] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
+  skillforge pack [dir] --all [--output-dir ./.skillforge/pack-artifacts] [--index [./artifacts/batch-pack.index.json]] [--report [./reports/pack-all.report.md]] [--json|--format text|json]
   skillforge inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
   skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
