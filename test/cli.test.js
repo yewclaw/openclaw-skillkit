@@ -531,6 +531,16 @@ serialTest("cli help documents the local studio command", async () => {
   assert.match(result.stdout, /--port 3210/);
 });
 
+serialTest("cli help documents persisted index queries", async () => {
+  const result = await runCli(["help", "index"]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /skillforge index/);
+  assert.match(result.stdout, /persisted batch inspect\/review index/);
+  assert.match(result.stdout, /--list action-group/);
+  assert.match(result.stdout, /--plain/);
+});
+
 serialTest("cli inspect reads the embedded archive manifest", async () => {
   const tempDir = await makeTempDir("skillforge-inspect-");
   const skillDir = path.join(tempDir, "skill");
@@ -1069,6 +1079,105 @@ serialTest("cli review --all can write a persisted index with operations summary
   assert.deepEqual(index.operationsSummary.blockedSkills, ["broken"]);
 });
 
+serialTest("cli index can query persisted review indexes for maintenance actions", async () => {
+  const tempDir = await makeTempDir("skillforge-index-review-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const baselinesDir = path.join(tempDir, "baselines");
+  const artifactsDir = path.join(tempDir, "artifacts");
+  const indexPath = path.join(tempDir, "review-all.json");
+  const weatherDir = path.join(skillsRoot, "weather");
+  const brokenDir = path.join(skillsRoot, "broken");
+  await copyFixture(path.join("valid", "basic-skill"), weatherDir);
+  await copyFixture(path.join("invalid", "bad-version-skill"), brokenDir);
+  await fs.mkdir(baselinesDir, { recursive: true });
+
+  let result = await runCli(["pack", weatherDir, "--output", path.join(baselinesDir, "weather-research.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+  await fs.appendFile(path.join(weatherDir, "references", "README.md"), "\nChanged after baseline.\n");
+
+  result = await runCli([
+    "review",
+    skillsRoot,
+    "--all",
+    "--output-dir",
+    artifactsDir,
+    "--baseline-dir",
+    baselinesDir,
+    "--index",
+    indexPath,
+    "--json"
+  ]);
+
+  assert.equal(result.code, 1, result.stderr);
+
+  result = await runCli(["index", indexPath, "--list", "blocked-skills", "--plain"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout.trim(), "broken");
+
+  result = await runCli(["index", indexPath, "--json"]);
+  assert.equal(result.code, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.type, "review");
+  assert.equal(payload.summary.status, "NOT READY");
+  assert.equal(payload.summary.itemCount, 2);
+  assert.equal(payload.availableLists.find((entry) => entry.name === "blocked-skills").count, 1);
+});
+
+serialTest("cli index can summarize persisted inspect indexes and list cleanup targets", async () => {
+  const tempDir = await makeTempDir("skillforge-index-inspect-");
+  const currentDir = path.join(tempDir, "current");
+  const baselineDir = path.join(tempDir, "baseline");
+  const indexPath = path.join(tempDir, "inspect-all.json");
+  const weatherDir = path.join(tempDir, "weather");
+  const alertsDir = path.join(tempDir, "alerts");
+  await copyFixture(path.join("valid", "basic-skill"), weatherDir);
+  await copyFixture(path.join("valid", "basic-skill"), alertsDir);
+  await fs.mkdir(baselineDir, { recursive: true });
+
+  let result = await runCli(["pack", weatherDir, "--output", path.join(baselineDir, "weather-research.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+  result = await runCli(["pack", alertsDir, "--output", path.join(baselineDir, "unused.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+
+  await fs.appendFile(path.join(weatherDir, "references", "README.md"), "\nChanged after release.\n");
+  await fs.writeFile(
+    path.join(alertsDir, "SKILL.md"),
+    `---
+name: alerts-skill
+description: Persisted inspect index queries should expose orphaned cleanup targets.
+version: 1.0.0
+---
+
+# Alerts Skill
+
+## Purpose
+Exercise index-driven inspect maintenance output.
+
+## Workflow
+1. Package the current release set.
+2. Inspect the persisted release index.
+`
+  );
+
+  result = await runCli(["pack", weatherDir, "--output", path.join(currentDir, "weather.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+  result = await runCli(["pack", alertsDir, "--output", path.join(currentDir, "alerts.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+
+  result = await runCli(["inspect", currentDir, "--all", "--baseline-dir", baselineDir, "--index", indexPath, "--json"]);
+  assert.equal(result.code, 0, result.stderr);
+
+  result = await runCli(["index", indexPath]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Type: batch inspect index/);
+  assert.match(result.stdout, /Status: RELEASE CHANGES DETECTED/);
+  assert.match(result.stdout, /orphaned-baselines \(1\):/);
+
+  result = await runCli(["index", indexPath, "--list", "orphaned-baselines", "--plain"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout.trim(), /unused\.skill$/);
+});
+
 serialTest("cli review --all rejects single-skill artifact flags", async () => {
   const result = await runCli(["review", ".", "--all", "--output", "./artifact.skill"]);
 
@@ -1088,4 +1197,33 @@ serialTest("cli lint rejects conflicting format flags", async () => {
 
   assert.equal(result.code, 1);
   assert.match(result.stderr, /Use either --json or --format, not both\./);
+});
+
+serialTest("cli index rejects --plain without a selected action group", async () => {
+  const tempDir = await makeTempDir("skillforge-index-plain-");
+  const indexPath = path.join(tempDir, "index.json");
+  await fs.writeFile(
+    indexPath,
+    JSON.stringify({
+      rootDir: tempDir,
+      archiveCount: 0,
+      summary: {
+        duplicateCoordinates: 0,
+        multiVersionSkills: 0,
+        releaseChanged: 0,
+        baselineMissing: 0
+      },
+      operationsSummary: {
+        duplicateReleaseCoordinates: [],
+        skillsWithVersionSpread: [],
+        archivesWithReleaseChanges: [],
+        archivesMissingBaselines: []
+      }
+    })
+  );
+
+  const result = await runCli(["index", indexPath, "--plain"]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /index --plain requires --list/);
 });

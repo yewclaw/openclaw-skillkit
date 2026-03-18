@@ -6,6 +6,7 @@ import { runLint } from "./commands/lint";
 import { runPack } from "./commands/pack";
 import { runInspect } from "./commands/inspect";
 import { runReview } from "./commands/review";
+import { runIndex } from "./commands/index";
 import { runServe } from "./commands/serve";
 import { TEMPLATE_MODES, type TemplateMode } from "./lib/templates";
 
@@ -33,6 +34,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       return;
     case "review":
       await handleReview(parsed);
+      return;
+    case "index":
+      await handleIndex(parsed);
       return;
     case "serve":
       await handleServe(parsed);
@@ -184,6 +188,35 @@ async function handleReview(parsed: ReturnType<typeof parseArgs>): Promise<void>
   process.exitCode = exitCode;
 }
 
+async function handleIndex(parsed: ReturnType<typeof parseArgs>): Promise<void> {
+  assertNoUnexpectedFlags(parsed, ["format", "json", "list", "plain", "limit"]);
+  assertArgumentCount(parsed, 1, "index expects exactly 1 persisted index path.");
+
+  const indexPath = parsed.positionals[0];
+  if (!indexPath) {
+    throw new Error('index requires a persisted batch index path. Run "skillforge help index" for examples.');
+  }
+
+  const limitValue = getFlag(parsed, "limit");
+  const limit =
+    typeof limitValue === "string" && /^\d+$/.test(limitValue)
+      ? Number(limitValue)
+      : typeof limitValue === "undefined"
+        ? undefined
+        : Number.NaN;
+
+  if (typeof limit !== "undefined" && (!Number.isInteger(limit) || limit < 1)) {
+    throw new Error('index expects --limit to be an integer greater than 0.');
+  }
+
+  await runIndex(indexPath, {
+    format: parseMachineFormat(parsed, "index"),
+    listName: typeof getFlag(parsed, "list") === "string" ? String(getFlag(parsed, "list")) : undefined,
+    plain: getFlag(parsed, "plain") === true,
+    limit
+  });
+}
+
 async function handleServe(parsed: ReturnType<typeof parseArgs>): Promise<void> {
   assertNoUnexpectedFlags(parsed, ["host", "port"]);
   assertArgumentCount(parsed, 0, "serve does not accept positional arguments.");
@@ -323,6 +356,23 @@ Examples:
     return;
   }
 
+  if (command === "index") {
+    console.log(`skillforge index
+
+Read and query a persisted batch inspect/review index.
+
+Usage:
+  skillforge index <index.json> [--list action-group] [--plain] [--limit 20] [--json|--format text|json]
+
+Examples:
+  skillforge index ./artifacts/review-all.index.json
+  skillforge index ./artifacts/review-all.index.json --list blocked-skills
+  skillforge index ./artifacts/review-all.index.json --list blocked-skills --plain
+  skillforge index ./.skillforge/inspect-all.index.json --list orphaned-baselines --json
+`);
+    return;
+  }
+
   if (command === "serve") {
     console.log(`skillforge serve
 
@@ -351,6 +401,7 @@ Usage:
   skillforge inspect <archive.skill> [--source ./skill-dir] [--against ./previous.skill] [--entry SKILL.md] [--report [./dist/my-skill.report.md]] [--json|--format text|json]
   skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--index [./.skillforge/inspect-all.index.json]] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
   skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--index [./artifacts/review-all.index.json]] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
+  skillforge index <index.json> [--list action-group] [--plain] [--limit 20] [--json|--format text|json]
   skillforge serve [--host 127.0.0.1] [--port 3210]
 
 Help:

@@ -377,6 +377,18 @@ When you add `--index` to `review --all`, SkillForge also writes the batch resul
 
 The result is still one compact scorecard, but it reduces the manual digging that usually happens before repo-wide release handoff.
 
+### 6. Query saved batch indexes for maintenance actions
+
+Use `index` when you already have a saved batch `inspect` or `review` JSON index and want a lean operational view without rerunning the full workflow.
+
+```bash
+skillforge index ./artifacts/review-all.index.json
+skillforge index ./artifacts/review-all.index.json --list blocked-skills --plain
+skillforge index ./.skillforge/inspect-all.index.json --list orphaned-baselines --json
+```
+
+The command auto-detects whether the file came from `inspect --all` or `review --all`, prints a concise status summary, and exposes action groups such as blocked skills, release changes, missing baselines, drifted artifacts, duplicate release coordinates, version spread, and orphaned baselines. Adding `--plain` turns one action group into newline output for shell scripts, while `--json` keeps the result structured for CI.
+
 ## Commands
 
 | Command | Purpose |
@@ -387,6 +399,7 @@ The result is still one compact scorecard, but it reduces the manual digging tha
 | `skillforge help pack` | Show single-skill packaging plus repo-wide batch packaging, JSON reporting, index export, and report export. |
 | `skillforge help inspect` | Show single-archive inspection plus repo-scale archive inventory, baseline comparison, entry preview, and report export usage. |
 | `skillforge help review` | Show single-skill and repo-scale review workflows, including baseline comparison and report export usage. |
+| `skillforge help index` | Show how to summarize and extract actionable lists from persisted batch inspect/review indexes. |
 | `skillforge help serve` | Show local studio host and port options. |
 | `skillforge serve` | Start SkillForge Studio. |
 | `npm run benchmark -- --help` | Show benchmark runner flags. |
