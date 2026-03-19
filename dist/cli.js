@@ -351,8 +351,10 @@ Usage:
 Examples:
   skillforge index ./artifacts/review-all.index.json
   skillforge index ./artifacts/review-all.index.json --list blocked-skills
+  skillforge index ./artifacts/review-all.index.json --list stale-artifacts --commands --plain
   skillforge index ./artifacts/review-all.index.json --list blocked-skills --commands --plain
   skillforge index ./artifacts/review-all.index.json --commands
+  skillforge index ./artifacts/review-all.index.json --apply blocked-artifacts
   skillforge index ./artifacts/review-all.index.json --apply missing-baselines
   skillforge index ./artifacts/review-all.index.json --apply release-changes --yes
   skillforge index ./.skillforge/inspect-all.index.json --list orphaned-baselines --json

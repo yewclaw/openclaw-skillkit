@@ -90,6 +90,8 @@ async function runBatchReview(rootDir, options) {
             skillDir,
             relativeDir,
             name,
+            artifactPath: outputPath,
+            artifactPresent: await (0, fs_1.exists)(outputPath),
             readiness: review.readiness,
             releaseSummary: (0, workflow_1.summarizeReviewReadiness)(review),
             lint: review.lint,
@@ -145,6 +147,7 @@ async function runBatchReview(rootDir, options) {
             summary: result.summary,
             artifactSummary: result.artifactSummary,
             maintenanceSummary: result.maintenanceSummary,
+            artifactCleanupSummary: result.artifactCleanupSummary,
             releaseHotspots: result.releaseSummary,
             baselineSummary: result.baselineSummary,
             operationsSummary: result.operationsSummary,
@@ -215,6 +218,11 @@ async function runBatchReview(rootDir, options) {
         for (const hotspot of result.maintenanceSummary.issueHotspots) {
             console.log(`  ${hotspot.code}: ${hotspot.count} issue(s) across ${hotspot.skills.join(", ")}`);
         }
+    }
+    if (result.artifactCleanupSummary.blockedSkillArtifacts.length > 0 || result.artifactCleanupSummary.staleArtifacts.length > 0) {
+        console.log("Artifact cleanup:");
+        console.log(`  Blocked skill artifacts: ${result.artifactCleanupSummary.blockedSkillArtifacts.length}`);
+        console.log(`  Stale artifacts: ${result.artifactCleanupSummary.staleArtifacts.length}`);
     }
     if (result.baselineSummary?.orphanedArchives.length) {
         console.log("Orphaned baselines:");
@@ -291,6 +299,8 @@ async function summarizeBatchReview(rootDir, artifactDir, baselineDir, skills) {
     const changedPathCounts = new Map();
     const metadataCounts = new Map();
     const matchedBaselineArchives = new Set();
+    const activeArtifactPaths = new Set();
+    const blockedArtifactPaths = new Set();
     for (const skill of skills) {
         if (skill.readiness === "ready") {
             summary.ready += 1;
@@ -316,6 +326,10 @@ async function summarizeBatchReview(rootDir, artifactDir, baselineDir, skills) {
             summary.artifactsCreated += 1;
             summary.artifactBytes += skill.archive.archiveSizeBytes;
             summary.artifactEntries += skill.archive.entryCount;
+            activeArtifactPaths.add(node_path_1.default.resolve(skill.artifactPath));
+        }
+        else if (skill.readiness === "not-ready" && skill.artifactPresent) {
+            blockedArtifactPaths.add(node_path_1.default.resolve(skill.artifactPath));
         }
         if (skill.archive?.releaseComparison) {
             summary.baselineCompared += 1;
@@ -419,6 +433,8 @@ async function summarizeBatchReview(rootDir, artifactDir, baselineDir, skills) {
     const baselineSummary = baselineDir
         ? await summarizeBaselineCoverage(node_path_1.default.resolve(baselineDir), skills, matchedBaselineArchives)
         : undefined;
+    const staleArtifacts = await listStaleReviewArtifacts(artifactDir, activeArtifactPaths, blockedArtifactPaths);
+    const blockedSkillArtifacts = [...blockedArtifactPaths].sort((left, right) => left.localeCompare(right));
     return {
         rootDir,
         artifactDir,
@@ -436,6 +452,11 @@ async function summarizeBatchReview(rootDir, artifactDir, baselineDir, skills) {
         },
         maintenanceSummary: {
             issueHotspots
+        },
+        artifactCleanupSummary: {
+            requestedDir: artifactDir,
+            blockedSkillArtifacts,
+            staleArtifacts
         },
         releaseSummary,
         baselineSummary,
@@ -463,7 +484,9 @@ async function summarizeBatchReview(rootDir, artifactDir, baselineDir, skills) {
             driftedArtifacts: skills
                 .filter((skill) => skill.archive && !skill.archive.comparison.matches)
                 .map((skill) => skill.relativeDir)
-                .sort((left, right) => left.localeCompare(right))
+                .sort((left, right) => left.localeCompare(right)),
+            blockedSkillArtifacts: blockedSkillArtifacts.map((artifactPath) => node_path_1.default.relative(artifactDir, artifactPath) || node_path_1.default.basename(artifactPath)),
+            staleArtifacts: staleArtifacts.map((artifactPath) => node_path_1.default.relative(artifactDir, artifactPath) || node_path_1.default.basename(artifactPath))
         },
         skills: skills.sort((left, right) => left.relativeDir.localeCompare(right.relativeDir))
     };
@@ -528,6 +551,23 @@ function buildBatchReviewReport(result) {
         lines.push("", "## Issue Hotspots");
         for (const hotspot of result.maintenanceSummary.issueHotspots) {
             lines.push(`- ${hotspot.code}: ${hotspot.count} issue(s) across ${hotspot.skills.join(", ")}`);
+        }
+    }
+    lines.push("", "## Artifact Cleanup");
+    lines.push("");
+    lines.push(`- Requested directory: \`${result.artifactCleanupSummary.requestedDir}\``);
+    lines.push(`- Blocked skill artifacts: ${result.artifactCleanupSummary.blockedSkillArtifacts.length}`);
+    lines.push(`- Stale artifacts: ${result.artifactCleanupSummary.staleArtifacts.length}`);
+    if (result.artifactCleanupSummary.blockedSkillArtifacts.length > 0) {
+        lines.push("", "### Blocked Skill Artifacts");
+        for (const artifactPath of result.artifactCleanupSummary.blockedSkillArtifacts) {
+            lines.push(`- \`${artifactPath}\``);
+        }
+    }
+    if (result.artifactCleanupSummary.staleArtifacts.length > 0) {
+        lines.push("", "### Stale Artifacts");
+        for (const artifactPath of result.artifactCleanupSummary.staleArtifacts) {
+            lines.push(`- \`${artifactPath}\``);
         }
     }
     if (result.baselineSummary) {
@@ -623,6 +663,17 @@ async function listBaselineArchives(rootDir) {
     }
     await walk(rootDir);
     return results;
+}
+async function listStaleReviewArtifacts(artifactDir, activeArtifactPaths, blockedArtifactPaths) {
+    if (!(await (0, fs_1.exists)(artifactDir))) {
+        return [];
+    }
+    const entries = await (0, fs_1.listFilesRecursive)(artifactDir);
+    return entries
+        .filter((entry) => entry.relativePath.endsWith(".skill"))
+        .map((entry) => node_path_1.default.resolve(entry.absolutePath))
+        .filter((artifactPath) => !activeArtifactPaths.has(artifactPath) && !blockedArtifactPaths.has(artifactPath))
+        .sort((left, right) => left.localeCompare(right));
 }
 async function writeBatchReviewReport(result, reportPath) {
     if (typeof reportPath === "undefined") {

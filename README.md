@@ -369,6 +369,7 @@ For multi-skill repos, `review --all` closes the gap between batch lint and real
 That batch review output now also includes maintainer-focused rollups across CLI, JSON, and exported Markdown:
 
 - artifact inventory totals such as archives created, bundled file counts, total bytes, and the largest review artifacts
+- artifact cleanup targets such as blocked-skill artifacts left behind in a stable output directory and stale `.skill` files from older runs
 - release hotspots that show which bundled paths and metadata fields changed most often across the repo
 - issue hotspots that surface the most common lint failures without reading every per-skill section
 - baseline coverage reporting that calls out missing baselines and orphaned release artifacts sitting in the baseline directory
@@ -384,8 +385,10 @@ Use `index` when you already have a saved batch `inspect` or `review` JSON index
 ```bash
 skillforge index ./artifacts/review-all.index.json
 skillforge index ./artifacts/review-all.index.json --list blocked-skills --plain
+skillforge index ./artifacts/review-all.index.json --list stale-artifacts --commands --plain
 skillforge index ./artifacts/review-all.index.json --list blocked-skills --commands --plain
 skillforge index ./artifacts/review-all.index.json --commands
+skillforge index ./artifacts/review-all.index.json --apply blocked-artifacts
 skillforge index ./artifacts/review-all.index.json --apply missing-baselines
 skillforge index ./artifacts/review-all.index.json --apply release-changes --yes
 skillforge index ./.skillforge/inspect-all.index.json --list orphaned-baselines --json
@@ -393,17 +396,24 @@ skillforge index ./.skillforge/inspect-all.index.json --list orphaned-baselines 
 
 The command auto-detects whether the file came from `inspect --all` or `review --all`, prints a concise status summary, and exposes action groups such as blocked skills, release changes, missing baselines, drifted artifacts, duplicate release coordinates, version spread, and orphaned baselines. Adding `--plain` turns one action group into newline output for shell scripts, while `--json` keeps the result structured for CI.
 
+For persisted `review --all` indexes, the same saved data now also captures review-artifact cleanup work in stable output directories:
+
+- blocked skill artifacts where a previously generated `.skill` is still present even though the current skill is not ready
+- stale review artifacts that sit under the artifact directory but were not produced by the current batch review
+
 Adding `--commands` upgrades that saved index into a practical follow-up helper. Instead of only listing affected items, SkillForge can now emit concrete next-step commands such as:
 
 - `skillforge lint ...` for blocked review targets
 - `skillforge inspect ... --against ...` for release deltas captured in saved indexes
 - `cp ...` commands to promote current artifacts into a missing baseline directory
+- `rm -f ...` commands for blocked or stale review artifact cleanup
 - `rm -f ...` commands for orphaned baseline cleanup
 
 Adding `--apply` closes that loop for the safe file operations that maintainers repeat most often. SkillForge now turns persisted indexes into dry-run maintenance plans for:
 
 - promoting missing baselines from current review or inspect artifacts
 - refreshing matched baseline archives when a release changed and the new artifact is the version you want to keep
+- removing blocked or stale review artifacts from persisted `review --all` output directories
 - removing orphaned baseline archives that no longer match anything in the current repo or release set
 
 `--apply` stays intentionally narrow: it only supports those file operations, prints a dry-run plan by default, and requires `--yes` before changing files.
@@ -442,7 +452,7 @@ The repo keeps the trust boundary explicit:
 - packaged archives include skill metadata plus per-file sizes and hashes, and avoid recursively bundling old `.skill` artifacts
 - `inspect` lets authors and reviewers confirm the manifest from the built artifact itself, compare it against the current source directory for drift, compare it against a previous shipped artifact for release deltas, preview bundled files, and export a review-ready Markdown report
 - `review` provides a single readiness verdict for one skill or a whole repo, covering lint status, archive creation, source-to-artifact parity, release hotspots, artifact inventory, and optional baseline coverage / release delta review before handoff
-- `index` turns saved batch inspect/review indexes into reusable maintainer inputs by exposing script-friendly lists, concrete cleanup/promotion commands, and dry-run/apply baseline maintenance actions
+- `index` turns saved batch inspect/review indexes into reusable maintainer inputs by exposing script-friendly lists, concrete cleanup/promotion commands, and dry-run/apply maintenance actions for both baselines and review artifacts
 - fixture-driven tests cover parsing, linting, CLI behavior, and archive contents
 - `npm run verify` runs tests and benchmarks, and also typechecks plus rebuilds `dist/` when the local TypeScript compiler is available
 - GitHub Actions runs the same `npm run verify` command on pushes and pull requests

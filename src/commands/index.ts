@@ -40,6 +40,11 @@ interface ReviewIndexShape {
       count: number;
     }>;
   };
+  artifactCleanupSummary?: {
+    requestedDir: string;
+    blockedSkillArtifacts?: string[];
+    staleArtifacts?: string[];
+  };
   baselineSummary?: {
     orphanedArchives?: string[];
   };
@@ -50,11 +55,15 @@ interface ReviewIndexShape {
     skillsWithReleaseChanges: string[];
     skillsMissingBaselines: string[];
     driftedArtifacts: string[];
+    blockedSkillArtifacts?: string[];
+    staleArtifacts?: string[];
   };
   skills?: Array<{
     skillDir: string;
     relativeDir: string;
     name?: string;
+    artifactPath?: string;
+    artifactPresent?: boolean;
     readiness: "ready" | "ready-with-warnings" | "not-ready";
     archive?: {
       destination: string;
@@ -132,7 +141,8 @@ interface IndexSummary {
 type MaintenanceOperationMode =
   | "promote-missing-baseline"
   | "sync-release-baseline"
-  | "remove-orphaned-baseline";
+  | "remove-orphaned-baseline"
+  | "remove-artifact";
 
 interface MaintenanceOperation {
   mode: MaintenanceOperationMode;
@@ -511,6 +521,18 @@ function buildReviewActionGroups(index: ReviewIndexShape): ActionGroup[] {
       items: sortStrings(index.operationsSummary.driftedArtifacts)
     },
     {
+      name: "blocked-artifacts",
+      label: "Blocked Skill Artifacts",
+      description: "Existing review artifacts for skills that are currently blocked.",
+      items: sortStrings(index.operationsSummary.blockedSkillArtifacts ?? [])
+    },
+    {
+      name: "stale-artifacts",
+      label: "Stale Review Artifacts",
+      description: "Archived review outputs under the artifact directory that were not produced by the current batch review.",
+      items: sortStrings(index.operationsSummary.staleArtifacts ?? [])
+    },
+    {
       name: "orphaned-baselines",
       label: "Orphaned Baselines",
       description: "Baseline archives that were not matched by any reviewed skill.",
@@ -636,6 +658,22 @@ function buildReviewCommandGroups(index: ReviewIndexShape): Map<string, string[]
       )
     ],
     [
+      "blocked-artifacts",
+      buildUniqueCommands(
+        (index.operationsSummary.blockedSkillArtifacts ?? []).map((artifactPath) =>
+          `rm -f ${shellQuote(resolveReviewArtifactPath(index, artifactPath))}`
+        )
+      )
+    ],
+    [
+      "stale-artifacts",
+      buildUniqueCommands(
+        (index.operationsSummary.staleArtifacts ?? []).map((artifactPath) =>
+          `rm -f ${shellQuote(resolveReviewArtifactPath(index, artifactPath))}`
+        )
+      )
+    ],
+    [
       "orphaned-baselines",
       buildUniqueCommands(
         (index.baselineSummary?.orphanedArchives ?? []).map((archivePath) => `rm -f ${shellQuote(archivePath)}`)
@@ -744,6 +782,34 @@ function buildReviewOperationGroups(index: ReviewIndexShape): Map<string, Mainte
           targetPath: archivePath,
           detail: `remove ${archivePath}`
         }))
+      )
+    ],
+    [
+      "blocked-artifacts",
+      buildUniqueOperations(
+        (index.operationsSummary.blockedSkillArtifacts ?? []).map((artifactPath) => {
+          const resolvedArtifactPath = resolveReviewArtifactPath(index, artifactPath);
+          return {
+            mode: "remove-artifact",
+            label: artifactPath,
+            targetPath: resolvedArtifactPath,
+            detail: `remove ${resolvedArtifactPath}`
+          };
+        })
+      )
+    ],
+    [
+      "stale-artifacts",
+      buildUniqueOperations(
+        (index.operationsSummary.staleArtifacts ?? []).map((artifactPath) => {
+          const resolvedArtifactPath = resolveReviewArtifactPath(index, artifactPath);
+          return {
+            mode: "remove-artifact",
+            label: artifactPath,
+            targetPath: resolvedArtifactPath,
+            detail: `remove ${resolvedArtifactPath}`
+          };
+        })
       )
     ]
   ]);
@@ -858,7 +924,7 @@ async function applyOperations(operations: MaintenanceOperation[], execute: bool
   const results: MaintenanceResult[] = [];
 
   for (const operation of operations) {
-    if (operation.mode === "remove-orphaned-baseline") {
+    if (operation.mode === "remove-orphaned-baseline" || operation.mode === "remove-artifact") {
       const targetExists = await exists(operation.targetPath);
       if (!targetExists) {
         results.push({ ...operation, outcome: "skipped", detail: `${operation.detail} (already absent)` });
@@ -938,4 +1004,12 @@ function shellQuote(value: string): string {
 
 function sortStrings(values: string[]): string[] {
   return values.slice().sort((left, right) => left.localeCompare(right));
+}
+
+function resolveReviewArtifactPath(index: ReviewIndexShape, artifactPath: string): string {
+  if (path.isAbsolute(artifactPath)) {
+    return artifactPath;
+  }
+
+  return path.join(index.artifactDir, artifactPath);
 }

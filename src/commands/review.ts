@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readdir } from "node:fs/promises";
 import { parseFrontmatter } from "../lib/frontmatter";
-import { exists, readTextFile, writeTextFile } from "../lib/fs";
+import { exists, listFilesRecursive, readTextFile, writeTextFile } from "../lib/fs";
 import {
   buildReviewReport,
   reviewSkill,
@@ -25,6 +25,8 @@ interface BatchReviewedSkill {
   skillDir: string;
   relativeDir: string;
   name?: string;
+  artifactPath: string;
+  artifactPresent: boolean;
   readiness: ReviewReadiness;
   releaseSummary: ReturnType<typeof summarizeReviewReadiness>;
   lint: {
@@ -122,6 +124,11 @@ interface BatchReviewResult {
       skills: string[];
     }>;
   };
+  artifactCleanupSummary: {
+    requestedDir: string;
+    blockedSkillArtifacts: string[];
+    staleArtifacts: string[];
+  };
   releaseSummary?: {
     changedPaths: Array<{
       path: string;
@@ -150,6 +157,8 @@ interface BatchReviewResult {
     skillsWithReleaseChanges: string[];
     skillsMissingBaselines: string[];
     driftedArtifacts: string[];
+    blockedSkillArtifacts: string[];
+    staleArtifacts: string[];
   };
   skills: BatchReviewedSkill[];
 }
@@ -256,6 +265,8 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
       skillDir,
       relativeDir,
       name,
+      artifactPath: outputPath,
+      artifactPresent: await exists(outputPath),
       readiness: review.readiness,
       releaseSummary: summarizeReviewReadiness(review),
       lint: review.lint,
@@ -315,6 +326,7 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
           summary: result.summary,
           artifactSummary: result.artifactSummary,
           maintenanceSummary: result.maintenanceSummary,
+          artifactCleanupSummary: result.artifactCleanupSummary,
           releaseHotspots: result.releaseSummary,
           baselineSummary: result.baselineSummary,
           operationsSummary: result.operationsSummary,
@@ -407,6 +419,11 @@ async function runBatchReview(rootDir: string, options: RunReviewOptions): Promi
     for (const hotspot of result.maintenanceSummary.issueHotspots) {
       console.log(`  ${hotspot.code}: ${hotspot.count} issue(s) across ${hotspot.skills.join(", ")}`);
     }
+  }
+  if (result.artifactCleanupSummary.blockedSkillArtifacts.length > 0 || result.artifactCleanupSummary.staleArtifacts.length > 0) {
+    console.log("Artifact cleanup:");
+    console.log(`  Blocked skill artifacts: ${result.artifactCleanupSummary.blockedSkillArtifacts.length}`);
+    console.log(`  Stale artifacts: ${result.artifactCleanupSummary.staleArtifacts.length}`);
   }
   if (result.baselineSummary?.orphanedArchives.length) {
     console.log("Orphaned baselines:");
@@ -509,6 +526,8 @@ async function summarizeBatchReview(
   const changedPathCounts = new Map<string, { count: number; skills: Set<string>; changeKinds: Set<string> }>();
   const metadataCounts = new Map<"name" | "description" | "version", { count: number; skills: Set<string> }>();
   const matchedBaselineArchives = new Set<string>();
+  const activeArtifactPaths = new Set<string>();
+  const blockedArtifactPaths = new Set<string>();
 
   for (const skill of skills) {
     if (skill.readiness === "ready") {
@@ -535,6 +554,9 @@ async function summarizeBatchReview(
       summary.artifactsCreated += 1;
       summary.artifactBytes += skill.archive.archiveSizeBytes;
       summary.artifactEntries += skill.archive.entryCount;
+      activeArtifactPaths.add(path.resolve(skill.artifactPath));
+    } else if (skill.readiness === "not-ready" && skill.artifactPresent) {
+      blockedArtifactPaths.add(path.resolve(skill.artifactPath));
     }
 
     if (skill.archive?.releaseComparison) {
@@ -652,6 +674,8 @@ async function summarizeBatchReview(
   const baselineSummary = baselineDir
     ? await summarizeBaselineCoverage(path.resolve(baselineDir), skills, matchedBaselineArchives)
     : undefined;
+  const staleArtifacts = await listStaleReviewArtifacts(artifactDir, activeArtifactPaths, blockedArtifactPaths);
+  const blockedSkillArtifacts = [...blockedArtifactPaths].sort((left, right) => left.localeCompare(right));
 
   return {
     rootDir,
@@ -670,6 +694,11 @@ async function summarizeBatchReview(
     },
     maintenanceSummary: {
       issueHotspots
+    },
+    artifactCleanupSummary: {
+      requestedDir: artifactDir,
+      blockedSkillArtifacts,
+      staleArtifacts
     },
     releaseSummary,
     baselineSummary,
@@ -697,7 +726,11 @@ async function summarizeBatchReview(
       driftedArtifacts: skills
         .filter((skill) => skill.archive && !skill.archive.comparison.matches)
         .map((skill) => skill.relativeDir)
-        .sort((left, right) => left.localeCompare(right))
+        .sort((left, right) => left.localeCompare(right)),
+      blockedSkillArtifacts: blockedSkillArtifacts.map(
+        (artifactPath) => path.relative(artifactDir, artifactPath) || path.basename(artifactPath)
+      ),
+      staleArtifacts: staleArtifacts.map((artifactPath) => path.relative(artifactDir, artifactPath) || path.basename(artifactPath))
     },
     skills: skills.sort((left, right) => left.relativeDir.localeCompare(right.relativeDir))
   };
@@ -767,6 +800,23 @@ function buildBatchReviewReport(result: BatchReviewResult): string {
     lines.push("", "## Issue Hotspots");
     for (const hotspot of result.maintenanceSummary.issueHotspots) {
       lines.push(`- ${hotspot.code}: ${hotspot.count} issue(s) across ${hotspot.skills.join(", ")}`);
+    }
+  }
+  lines.push("", "## Artifact Cleanup");
+  lines.push("");
+  lines.push(`- Requested directory: \`${result.artifactCleanupSummary.requestedDir}\``);
+  lines.push(`- Blocked skill artifacts: ${result.artifactCleanupSummary.blockedSkillArtifacts.length}`);
+  lines.push(`- Stale artifacts: ${result.artifactCleanupSummary.staleArtifacts.length}`);
+  if (result.artifactCleanupSummary.blockedSkillArtifacts.length > 0) {
+    lines.push("", "### Blocked Skill Artifacts");
+    for (const artifactPath of result.artifactCleanupSummary.blockedSkillArtifacts) {
+      lines.push(`- \`${artifactPath}\``);
+    }
+  }
+  if (result.artifactCleanupSummary.staleArtifacts.length > 0) {
+    lines.push("", "### Stale Artifacts");
+    for (const artifactPath of result.artifactCleanupSummary.staleArtifacts) {
+      lines.push(`- \`${artifactPath}\``);
     }
   }
   if (result.baselineSummary) {
@@ -884,6 +934,23 @@ async function listBaselineArchives(rootDir: string): Promise<string[]> {
 
   await walk(rootDir);
   return results;
+}
+
+async function listStaleReviewArtifacts(
+  artifactDir: string,
+  activeArtifactPaths: Set<string>,
+  blockedArtifactPaths: Set<string>
+): Promise<string[]> {
+  if (!(await exists(artifactDir))) {
+    return [];
+  }
+
+  const entries = await listFilesRecursive(artifactDir);
+  return entries
+    .filter((entry) => entry.relativePath.endsWith(".skill"))
+    .map((entry) => path.resolve(entry.absolutePath))
+    .filter((artifactPath) => !activeArtifactPaths.has(artifactPath) && !blockedArtifactPaths.has(artifactPath))
+    .sort((left, right) => left.localeCompare(right));
 }
 
 async function writeBatchReviewReport(result: BatchReviewResult, reportPath?: string | boolean): Promise<string | undefined> {

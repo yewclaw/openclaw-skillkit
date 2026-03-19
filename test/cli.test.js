@@ -1081,6 +1081,64 @@ serialTest("cli review --all can write a persisted index with operations summary
   assert.deepEqual(index.operationsSummary.blockedSkills, ["broken"]);
 });
 
+serialTest("cli review --all indexes artifact cleanup targets and index can apply them", async () => {
+  const tempDir = await makeTempDir("skillforge-review-artifact-cleanup-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const artifactsDir = path.join(tempDir, "artifacts");
+  const indexPath = path.join(tempDir, "review-all.json");
+  const weatherDir = path.join(skillsRoot, "weather");
+  const brokenDir = path.join(skillsRoot, "broken");
+  await copyFixture(path.join("valid", "basic-skill"), weatherDir);
+  await copyFixture(path.join("invalid", "bad-version-skill"), brokenDir);
+  await fs.mkdir(artifactsDir, { recursive: true });
+
+  const blockedArtifactPath = path.join(artifactsDir, "broken.skill");
+  const staleArtifactPath = path.join(artifactsDir, "stale.skill");
+  await fs.writeFile(blockedArtifactPath, "old blocked artifact");
+  await fs.writeFile(staleArtifactPath, "old stale artifact");
+
+  let result = await runCli([
+    "review",
+    skillsRoot,
+    "--all",
+    "--output-dir",
+    artifactsDir,
+    "--index",
+    indexPath,
+    "--json"
+  ]);
+
+  assert.equal(result.code, 1);
+  let payload = JSON.parse(result.stdout);
+  assert.deepEqual(payload.artifactCleanupSummary.blockedSkillArtifacts, [blockedArtifactPath]);
+  assert.deepEqual(payload.artifactCleanupSummary.staleArtifacts, [staleArtifactPath]);
+  assert.deepEqual(payload.operationsSummary.blockedSkillArtifacts, ["broken.skill"]);
+  assert.deepEqual(payload.operationsSummary.staleArtifacts, ["stale.skill"]);
+
+  result = await runCli(["index", indexPath, "--list", "blocked-artifacts", "--plain"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout.trim(), "broken.skill");
+
+  result = await runCli(["index", indexPath, "--list", "stale-artifacts", "--commands", "--plain"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /rm -f .*stale\.skill/);
+
+  result = await runCli(["index", indexPath, "--apply", "blocked-artifacts"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Mode: dry-run/);
+  await fs.access(blockedArtifactPath);
+
+  result = await runCli(["index", indexPath, "--apply", "blocked-artifacts", "--yes", "--json"]);
+  assert.equal(result.code, 0, result.stderr);
+  payload = JSON.parse(result.stdout);
+  assert.equal(payload.apply.applied, 1);
+  await assert.rejects(fs.access(blockedArtifactPath));
+
+  result = await runCli(["index", indexPath, "--apply", "stale-artifacts", "--yes"]);
+  assert.equal(result.code, 0, result.stderr);
+  await assert.rejects(fs.access(staleArtifactPath));
+});
+
 serialTest("cli index can query persisted review indexes for maintenance actions", async () => {
   const tempDir = await makeTempDir("skillforge-index-review-");
   const skillsRoot = path.join(tempDir, "skills");
