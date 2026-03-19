@@ -189,7 +189,7 @@ async function handleReview(parsed: ReturnType<typeof parseArgs>): Promise<void>
 }
 
 async function handleIndex(parsed: ReturnType<typeof parseArgs>): Promise<void> {
-  assertNoUnexpectedFlags(parsed, ["format", "json", "list", "plain", "limit", "commands"]);
+  assertNoUnexpectedFlags(parsed, ["format", "json", "list", "plain", "limit", "commands", "apply", "yes"]);
   assertArgumentCount(parsed, 1, "index expects exactly 1 persisted index path.");
 
   const indexPath = parsed.positionals[0];
@@ -209,12 +209,35 @@ async function handleIndex(parsed: ReturnType<typeof parseArgs>): Promise<void> 
     throw new Error('index expects --limit to be an integer greater than 0.');
   }
 
-  await runIndex(indexPath, {
+  const applyFlag = getFlag(parsed, "apply");
+  if (applyFlag === true) {
+    throw new Error("index requires --apply to name an action group.");
+  }
+  const applyName = typeof applyFlag === "string" ? String(applyFlag) : undefined;
+  if (applyName && typeof getFlag(parsed, "list") === "string") {
+    throw new Error("index does not allow --apply together with --list.");
+  }
+  if (applyName && getFlag(parsed, "commands") === true) {
+    throw new Error("index does not allow --apply together with --commands.");
+  }
+  if (applyName && getFlag(parsed, "plain") === true) {
+    throw new Error("index does not allow --apply together with --plain.");
+  }
+  if (applyName && typeof limit !== "undefined") {
+    throw new Error("index does not allow --apply together with --limit.");
+  }
+  if (!applyName && getFlag(parsed, "yes") === true) {
+    throw new Error("index only accepts --yes together with --apply.");
+  }
+
+  process.exitCode = await runIndex(indexPath, {
     format: parseMachineFormat(parsed, "index"),
     listName: typeof getFlag(parsed, "list") === "string" ? String(getFlag(parsed, "list")) : undefined,
     plain: getFlag(parsed, "plain") === true,
     limit,
-    commands: getFlag(parsed, "commands") === true
+    commands: getFlag(parsed, "commands") === true,
+    applyName,
+    confirm: getFlag(parsed, "yes") === true
   });
 }
 
@@ -360,16 +383,19 @@ Examples:
   if (command === "index") {
     console.log(`skillforge index
 
-Read and query a persisted batch inspect/review index.
+Read, query, and apply safe maintenance actions from a persisted batch inspect/review index.
 
 Usage:
   skillforge index <index.json> [--list action-group] [--commands] [--plain] [--limit 20] [--json|--format text|json]
+  skillforge index <index.json> --apply action-group [--yes] [--json|--format text|json]
 
 Examples:
   skillforge index ./artifacts/review-all.index.json
   skillforge index ./artifacts/review-all.index.json --list blocked-skills
   skillforge index ./artifacts/review-all.index.json --list blocked-skills --commands --plain
   skillforge index ./artifacts/review-all.index.json --commands
+  skillforge index ./artifacts/review-all.index.json --apply missing-baselines
+  skillforge index ./artifacts/review-all.index.json --apply release-changes --yes
   skillforge index ./.skillforge/inspect-all.index.json --list orphaned-baselines --json
 `);
     return;
@@ -404,6 +430,7 @@ Usage:
   skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--index [./.skillforge/inspect-all.index.json]] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
   skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--index [./artifacts/review-all.index.json]] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
   skillforge index <index.json> [--list action-group] [--commands] [--plain] [--limit 20] [--json|--format text|json]
+  skillforge index <index.json> --apply action-group [--yes] [--json|--format text|json]
   skillforge serve [--host 127.0.0.1] [--port 3210]
 
 Help:

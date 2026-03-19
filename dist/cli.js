@@ -169,7 +169,7 @@ async function handleReview(parsed) {
     process.exitCode = exitCode;
 }
 async function handleIndex(parsed) {
-    assertNoUnexpectedFlags(parsed, ["format", "json", "list", "plain", "limit", "commands"]);
+    assertNoUnexpectedFlags(parsed, ["format", "json", "list", "plain", "limit", "commands", "apply", "yes"]);
     assertArgumentCount(parsed, 1, "index expects exactly 1 persisted index path.");
     const indexPath = parsed.positionals[0];
     if (!indexPath) {
@@ -184,12 +184,34 @@ async function handleIndex(parsed) {
     if (typeof limit !== "undefined" && (!Number.isInteger(limit) || limit < 1)) {
         throw new Error('index expects --limit to be an integer greater than 0.');
     }
-    await (0, index_1.runIndex)(indexPath, {
+    const applyFlag = (0, args_1.getFlag)(parsed, "apply");
+    if (applyFlag === true) {
+        throw new Error("index requires --apply to name an action group.");
+    }
+    const applyName = typeof applyFlag === "string" ? String(applyFlag) : undefined;
+    if (applyName && typeof (0, args_1.getFlag)(parsed, "list") === "string") {
+        throw new Error("index does not allow --apply together with --list.");
+    }
+    if (applyName && (0, args_1.getFlag)(parsed, "commands") === true) {
+        throw new Error("index does not allow --apply together with --commands.");
+    }
+    if (applyName && (0, args_1.getFlag)(parsed, "plain") === true) {
+        throw new Error("index does not allow --apply together with --plain.");
+    }
+    if (applyName && typeof limit !== "undefined") {
+        throw new Error("index does not allow --apply together with --limit.");
+    }
+    if (!applyName && (0, args_1.getFlag)(parsed, "yes") === true) {
+        throw new Error("index only accepts --yes together with --apply.");
+    }
+    process.exitCode = await (0, index_1.runIndex)(indexPath, {
         format: parseMachineFormat(parsed, "index"),
         listName: typeof (0, args_1.getFlag)(parsed, "list") === "string" ? String((0, args_1.getFlag)(parsed, "list")) : undefined,
         plain: (0, args_1.getFlag)(parsed, "plain") === true,
         limit,
-        commands: (0, args_1.getFlag)(parsed, "commands") === true
+        commands: (0, args_1.getFlag)(parsed, "commands") === true,
+        applyName,
+        confirm: (0, args_1.getFlag)(parsed, "yes") === true
     });
 }
 async function handleServe(parsed) {
@@ -320,16 +342,19 @@ Examples:
     if (command === "index") {
         console.log(`skillforge index
 
-Read and query a persisted batch inspect/review index.
+Read, query, and apply safe maintenance actions from a persisted batch inspect/review index.
 
 Usage:
   skillforge index <index.json> [--list action-group] [--commands] [--plain] [--limit 20] [--json|--format text|json]
+  skillforge index <index.json> --apply action-group [--yes] [--json|--format text|json]
 
 Examples:
   skillforge index ./artifacts/review-all.index.json
   skillforge index ./artifacts/review-all.index.json --list blocked-skills
   skillforge index ./artifacts/review-all.index.json --list blocked-skills --commands --plain
   skillforge index ./artifacts/review-all.index.json --commands
+  skillforge index ./artifacts/review-all.index.json --apply missing-baselines
+  skillforge index ./artifacts/review-all.index.json --apply release-changes --yes
   skillforge index ./.skillforge/inspect-all.index.json --list orphaned-baselines --json
 `);
         return;
@@ -362,6 +387,7 @@ Usage:
   skillforge inspect <archive-dir> --all [--baseline-dir ./released-skills] [--index [./.skillforge/inspect-all.index.json]] [--report [./reports/inspect-all.report.md]] [--json|--format text|json]
   skillforge review [dir] [--output ./dist/my-skill.skill] [--against ./dist/previous.skill] [--all] [--output-dir ./.skillforge/review-artifacts] [--baseline-dir ./released-skills] [--index [./artifacts/review-all.index.json]] [--report [./dist/my-skill.review.md]] [--json|--format text|json]
   skillforge index <index.json> [--list action-group] [--commands] [--plain] [--limit 20] [--json|--format text|json]
+  skillforge index <index.json> --apply action-group [--yes] [--json|--format text|json]
   skillforge serve [--host 127.0.0.1] [--port 3210]
 
 Help:

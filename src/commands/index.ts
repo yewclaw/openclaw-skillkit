@@ -1,5 +1,7 @@
 import path from "node:path";
+import { copyFile, rm } from "node:fs/promises";
 import { readTextFile } from "../lib/fs";
+import { ensureDir, exists } from "../lib/fs";
 
 export interface RunIndexOptions {
   format: "text" | "json";
@@ -7,6 +9,8 @@ export interface RunIndexOptions {
   plain?: boolean;
   limit?: number;
   commands?: boolean;
+  applyName?: string;
+  confirm?: boolean;
 }
 
 type IndexType = "review" | "inspect";
@@ -125,7 +129,24 @@ interface IndexSummary {
   hotspots: string[];
 }
 
-export async function runIndex(indexPath: string, options: RunIndexOptions): Promise<void> {
+type MaintenanceOperationMode =
+  | "promote-missing-baseline"
+  | "sync-release-baseline"
+  | "remove-orphaned-baseline";
+
+interface MaintenanceOperation {
+  mode: MaintenanceOperationMode;
+  label: string;
+  sourcePath?: string;
+  targetPath: string;
+  detail: string;
+}
+
+interface MaintenanceResult extends MaintenanceOperation {
+  outcome: "pending" | "applied" | "skipped" | "failed";
+}
+
+export async function runIndex(indexPath: string, options: RunIndexOptions): Promise<number> {
   const resolvedIndexPath = path.resolve(indexPath);
   const payload = JSON.parse(await readTextFile(resolvedIndexPath)) as unknown;
   const detectedType = detectIndexType(payload);
@@ -147,8 +168,72 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
     detectedType === "review"
       ? buildReviewCommandGroups(payload as ReviewIndexShape)
       : buildInspectCommandGroups(payload as InspectIndexShape);
+  const operationGroups =
+    detectedType === "review"
+      ? buildReviewOperationGroups(payload as ReviewIndexShape)
+      : buildInspectOperationGroups(payload as InspectIndexShape);
   const selectedGroup = selectActionGroup(actionGroups, options.listName);
   const selectedCommands = selectedGroup ? commandGroups.get(selectedGroup.name) ?? [] : [];
+
+  if (options.applyName) {
+    const selectedOperationGroup = selectActionGroup(actionGroups, options.applyName);
+    if (!selectedOperationGroup) {
+      throw new Error(`Unknown action group "${options.applyName}".`);
+    }
+    if (!operationGroups.has(selectedOperationGroup.name)) {
+      throw new Error(
+        `index --apply only supports actionable groups. Use one of: ${[...operationGroups.keys()].join(", ")}.`
+      );
+    }
+    const operations = operationGroups.get(selectedOperationGroup.name) ?? [];
+    const results = await applyOperations(operations, options.confirm === true);
+    const failed = results.filter((result) => result.outcome === "failed").length;
+
+    if (options.format === "json") {
+      console.log(
+        JSON.stringify(
+          {
+            indexPath: resolvedIndexPath,
+            type: detectedType,
+            summary,
+            apply: {
+              name: selectedOperationGroup.name,
+              label: selectedOperationGroup.label,
+              description: selectedOperationGroup.description,
+              dryRun: options.confirm !== true,
+              count: results.length,
+              applied: results.filter((result) => result.outcome === "applied").length,
+              pending: results.filter((result) => result.outcome === "pending").length,
+              skipped: results.filter((result) => result.outcome === "skipped").length,
+              failed,
+              results
+            }
+          },
+          null,
+          2
+        )
+      );
+      return failed > 0 ? 1 : 0;
+    }
+
+    console.log(`Index: ${resolvedIndexPath}`);
+    console.log(`Type: ${summary.headline}`);
+    console.log(`Apply: ${selectedOperationGroup.label}`);
+    console.log(`Mode: ${options.confirm === true ? "execute" : "dry-run"}`);
+    console.log(`Operations: ${results.length}`);
+    if (results.length === 0) {
+      console.log("  none");
+    } else {
+      for (const result of results) {
+        console.log(`  ${formatOperationOutcome(result.outcome)} ${result.label}: ${result.detail}`);
+      }
+    }
+    if (options.confirm !== true && results.some((result) => result.outcome === "pending")) {
+      console.log("Next: re-run with --yes to execute the pending operations.");
+    }
+
+    return failed > 0 ? 1 : 0;
+  }
 
   if (options.format === "json") {
     console.log(
@@ -192,7 +277,7 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
         2
       )
     );
-    return;
+    return 0;
   }
 
   if (selectedGroup && options.plain) {
@@ -200,7 +285,7 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
     for (const item of plainValues.slice(0, limit)) {
       console.log(item);
     }
-    return;
+    return 0;
   }
 
   console.log(`Index: ${resolvedIndexPath}`);
@@ -221,13 +306,13 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
     if (options.commands) {
       printCommandGroup(selectedCommands, limit);
     }
-    return;
+    return 0;
   }
 
   const groupsToPrint = actionGroups.filter((group) => group.items.length > 0).slice(0, 5);
   if (groupsToPrint.length === 0) {
     console.log("Actions: no current action items recorded in this index.");
-    return;
+    return 0;
   }
 
   console.log("Actions:");
@@ -247,7 +332,7 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
       .slice(0, 5);
     if (commandGroupsToPrint.length === 0) {
       console.log("Commands: no follow-up commands available from this index.");
-      return;
+      return 0;
     }
 
     console.log("Commands:");
@@ -257,6 +342,8 @@ export async function runIndex(indexPath: string, options: RunIndexOptions): Pro
       console.log(`  ${group.name}: ${preview.join(" | ")}${suffix}`);
     }
   }
+
+  return 0;
 }
 
 function printActionGroup(group: ActionGroup, limit: number): void {
@@ -604,6 +691,122 @@ function buildInspectCommandGroups(index: InspectIndexShape): Map<string, string
   ]);
 }
 
+function buildReviewOperationGroups(index: ReviewIndexShape): Map<string, MaintenanceOperation[]> {
+  const skills = index.skills ?? [];
+  const byRelativeDir = new Map(skills.map((skill) => [skill.relativeDir, skill] as const));
+
+  return new Map<string, MaintenanceOperation[]>([
+    [
+      "release-changes",
+      buildUniqueOperations(
+        index.operationsSummary.skillsWithReleaseChanges.map((relativeDir) => {
+          const skill = byRelativeDir.get(relativeDir);
+          if (!skill?.archive?.destination || !skill.archive.releaseComparison?.baselineArchivePath) {
+            return undefined;
+          }
+
+          return {
+            mode: "sync-release-baseline",
+            label: relativeDir,
+            sourcePath: skill.archive.destination,
+            targetPath: skill.archive.releaseComparison.baselineArchivePath,
+            detail: `copy ${skill.archive.destination} -> ${skill.archive.releaseComparison.baselineArchivePath}`
+          };
+        })
+      )
+    ],
+    [
+      "missing-baselines",
+      buildUniqueOperations(
+        index.operationsSummary.skillsMissingBaselines.map((relativeDir) => {
+          const skill = byRelativeDir.get(relativeDir);
+          const baselinePath = skill ? resolveReviewBaselinePromotionPath(skill) : undefined;
+          if (!skill?.archive?.destination || !baselinePath) {
+            return undefined;
+          }
+
+          return {
+            mode: "promote-missing-baseline",
+            label: relativeDir,
+            sourcePath: skill.archive.destination,
+            targetPath: baselinePath,
+            detail: `copy ${skill.archive.destination} -> ${baselinePath}`
+          };
+        })
+      )
+    ],
+    [
+      "orphaned-baselines",
+      buildUniqueOperations(
+        (index.baselineSummary?.orphanedArchives ?? []).map((archivePath) => ({
+          mode: "remove-orphaned-baseline",
+          label: path.basename(archivePath),
+          targetPath: archivePath,
+          detail: `remove ${archivePath}`
+        }))
+      )
+    ]
+  ]);
+}
+
+function buildInspectOperationGroups(index: InspectIndexShape): Map<string, MaintenanceOperation[]> {
+  const archives = index.archives ?? [];
+  const byRelativePath = new Map(archives.map((archive) => [archive.relativePath, archive] as const));
+
+  return new Map<string, MaintenanceOperation[]>([
+    [
+      "release-changes",
+      buildUniqueOperations(
+        index.operationsSummary.archivesWithReleaseChanges.map((relativePath) => {
+          const archive = byRelativePath.get(relativePath);
+          if (!archive?.releaseComparison?.baselineArchivePath) {
+            return undefined;
+          }
+
+          return {
+            mode: "sync-release-baseline",
+            label: relativePath,
+            sourcePath: archive.archivePath,
+            targetPath: archive.releaseComparison.baselineArchivePath,
+            detail: `copy ${archive.archivePath} -> ${archive.releaseComparison.baselineArchivePath}`
+          };
+        })
+      )
+    ],
+    [
+      "missing-baselines",
+      buildUniqueOperations(
+        index.operationsSummary.archivesMissingBaselines.map((relativePath) => {
+          const archive = byRelativePath.get(relativePath);
+          const baselinePath = archive ? resolveInspectBaselinePromotionPath(archive) : undefined;
+          if (!archive || !baselinePath) {
+            return undefined;
+          }
+
+          return {
+            mode: "promote-missing-baseline",
+            label: relativePath,
+            sourcePath: archive.archivePath,
+            targetPath: baselinePath,
+            detail: `copy ${archive.archivePath} -> ${baselinePath}`
+          };
+        })
+      )
+    ],
+    [
+      "orphaned-baselines",
+      buildUniqueOperations(
+        (index.baselineSummary?.orphanedArchives ?? []).map((archivePath) => ({
+          mode: "remove-orphaned-baseline",
+          label: path.basename(archivePath),
+          targetPath: archivePath,
+          detail: `remove ${archivePath}`
+        }))
+      )
+    ]
+  ]);
+}
+
 function resolveReviewBaselinePromotionPath(skill: NonNullable<ReviewIndexShape["skills"]>[number]): string | undefined {
   const requestedDir = skill.baselineLookup?.requestedDir;
   if (!requestedDir) {
@@ -628,6 +831,101 @@ function resolveInspectBaselinePromotionPath(
 
 function buildUniqueCommands(commands: Array<string | undefined>): string[] {
   return [...new Set(commands.filter((command): command is string => Boolean(command)))];
+}
+
+function buildUniqueOperations(operations: Array<MaintenanceOperation | undefined>): MaintenanceOperation[] {
+  const seen = new Set<string>();
+  const unique: MaintenanceOperation[] = [];
+
+  for (const operation of operations) {
+    if (!operation) {
+      continue;
+    }
+
+    const key = `${operation.mode}:${operation.sourcePath ?? ""}:${operation.targetPath}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(operation);
+  }
+
+  return unique;
+}
+
+async function applyOperations(operations: MaintenanceOperation[], execute: boolean): Promise<MaintenanceResult[]> {
+  const results: MaintenanceResult[] = [];
+
+  for (const operation of operations) {
+    if (operation.mode === "remove-orphaned-baseline") {
+      const targetExists = await exists(operation.targetPath);
+      if (!targetExists) {
+        results.push({ ...operation, outcome: "skipped", detail: `${operation.detail} (already absent)` });
+        continue;
+      }
+
+      if (!execute) {
+        results.push(operationAsResult(operation, "pending"));
+        continue;
+      }
+
+      await rm(operation.targetPath, { force: true });
+      results.push(operationAsResult(operation, "applied"));
+      continue;
+    }
+
+    if (!operation.sourcePath) {
+      results.push({ ...operation, outcome: "failed", detail: `${operation.detail} (missing source path)` });
+      continue;
+    }
+
+    const sourceExists = await exists(operation.sourcePath);
+    if (!sourceExists) {
+      results.push({ ...operation, outcome: "failed", detail: `${operation.detail} (source missing)` });
+      continue;
+    }
+
+    const targetExists = await exists(operation.targetPath);
+    if (operation.mode === "promote-missing-baseline" && targetExists) {
+      results.push({ ...operation, outcome: "skipped", detail: `${operation.detail} (target already exists)` });
+      continue;
+    }
+
+    if (!execute) {
+      results.push(operationAsResult(operation, "pending"));
+      continue;
+    }
+
+    await ensureDir(path.dirname(operation.targetPath));
+    await copyFile(operation.sourcePath, operation.targetPath);
+    results.push(operationAsResult(operation, "applied"));
+  }
+
+  return results;
+}
+
+function operationAsResult(
+  operation: MaintenanceOperation,
+  outcome: MaintenanceResult["outcome"]
+): MaintenanceResult {
+  return {
+    ...operation,
+    outcome
+  };
+}
+
+function formatOperationOutcome(outcome: MaintenanceResult["outcome"]): string {
+  switch (outcome) {
+    case "applied":
+      return "APPLY";
+    case "pending":
+      return "PLAN";
+    case "skipped":
+      return "SKIP ";
+    case "failed":
+      return "FAIL ";
+  }
 }
 
 function shellQuote(value: string): string {

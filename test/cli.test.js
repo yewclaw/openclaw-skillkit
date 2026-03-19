@@ -538,6 +538,8 @@ serialTest("cli help documents persisted index queries", async () => {
   assert.match(result.stdout, /skillforge index/);
   assert.match(result.stdout, /persisted batch inspect\/review index/);
   assert.match(result.stdout, /--list action-group/);
+  assert.match(result.stdout, /--apply action-group/);
+  assert.match(result.stdout, /--yes/);
   assert.match(result.stdout, /--plain/);
 });
 
@@ -1242,6 +1244,108 @@ serialTest("cli index can emit baseline promotion commands for missing baselines
   assert.match(result.stdout, /cp .*inspect-current\/weather\.skill .*inspect-baselines\/weather\.skill/);
 });
 
+serialTest("cli index can dry-run and apply missing baseline promotions from a review index", async () => {
+  const tempDir = await makeTempDir("skillforge-index-apply-review-");
+  const skillsRoot = path.join(tempDir, "skills");
+  const artifactsDir = path.join(tempDir, "artifacts");
+  const baselineDir = path.join(tempDir, "baselines");
+  const indexPath = path.join(tempDir, "review-all.json");
+  const weatherDir = path.join(skillsRoot, "weather");
+  await copyFixture(path.join("valid", "basic-skill"), weatherDir);
+  await fs.mkdir(baselineDir, { recursive: true });
+
+  let result = await runCli([
+    "review",
+    skillsRoot,
+    "--all",
+    "--output-dir",
+    artifactsDir,
+    "--baseline-dir",
+    baselineDir,
+    "--index",
+    indexPath,
+    "--json"
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+
+  const promotedBaselinePath = path.join(baselineDir, "weather.skill");
+  result = await runCli(["index", indexPath, "--apply", "missing-baselines"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Mode: dry-run/);
+  assert.match(result.stdout, /PLAN weather: copy /);
+  await assert.rejects(fs.access(promotedBaselinePath));
+
+  result = await runCli(["index", indexPath, "--apply", "missing-baselines", "--yes", "--json"]);
+  assert.equal(result.code, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.apply.dryRun, false);
+  assert.equal(payload.apply.applied, 1);
+  assert.equal(payload.apply.failed, 0);
+  const promotedBuffer = await fs.readFile(promotedBaselinePath);
+  const artifactBuffer = await fs.readFile(path.join(artifactsDir, "weather.skill"));
+  assert.deepEqual(promotedBuffer, artifactBuffer);
+});
+
+serialTest("cli index can apply release baseline refresh and orphan cleanup from an inspect index", async () => {
+  const tempDir = await makeTempDir("skillforge-index-apply-inspect-");
+  const currentDir = path.join(tempDir, "current");
+  const baselineDir = path.join(tempDir, "baseline");
+  const indexPath = path.join(tempDir, "inspect-all.json");
+  const weatherDir = path.join(tempDir, "weather");
+  const alertsDir = path.join(tempDir, "alerts");
+  await copyFixture(path.join("valid", "basic-skill"), weatherDir);
+  await copyFixture(path.join("valid", "basic-skill"), alertsDir);
+  await fs.mkdir(baselineDir, { recursive: true });
+
+  let result = await runCli(["pack", weatherDir, "--output", path.join(baselineDir, "weather-research.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+  result = await runCli(["pack", alertsDir, "--output", path.join(baselineDir, "unused.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+
+  const originalBaselineBuffer = await fs.readFile(path.join(baselineDir, "weather-research.skill"));
+  await fs.appendFile(path.join(weatherDir, "references", "README.md"), "\nChanged after release.\n");
+  await fs.writeFile(
+    path.join(alertsDir, "SKILL.md"),
+    `---
+name: alerts-skill
+description: Inspect apply should support release baseline refresh and orphan cleanup.
+version: 1.0.0
+---
+
+# Alerts Skill
+
+## Purpose
+Exercise apply flows for inspect indexes.
+
+## Workflow
+1. Package the current release set.
+2. Refresh the changed baseline.
+`
+  );
+
+  result = await runCli(["pack", weatherDir, "--output", path.join(currentDir, "weather.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+  result = await runCli(["pack", alertsDir, "--output", path.join(currentDir, "alerts.skill")]);
+  assert.equal(result.code, 0, result.stderr);
+
+  result = await runCli(["inspect", currentDir, "--all", "--baseline-dir", baselineDir, "--index", indexPath, "--json"]);
+  assert.equal(result.code, 0, result.stderr);
+
+  result = await runCli(["index", indexPath, "--apply", "release-changes", "--yes"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Mode: execute/);
+  assert.match(result.stdout, /APPLY weather\.skill: copy /);
+  const refreshedBaselineBuffer = await fs.readFile(path.join(baselineDir, "weather-research.skill"));
+  const currentWeatherBuffer = await fs.readFile(path.join(currentDir, "weather.skill"));
+  assert.notDeepEqual(refreshedBaselineBuffer, originalBaselineBuffer);
+  assert.deepEqual(refreshedBaselineBuffer, currentWeatherBuffer);
+
+  result = await runCli(["index", indexPath, "--apply", "orphaned-baselines", "--yes"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /APPLY unused\.skill: remove /);
+  await assert.rejects(fs.access(path.join(baselineDir, "unused.skill")));
+});
+
 serialTest("cli review --all rejects single-skill artifact flags", async () => {
   const result = await runCli(["review", ".", "--all", "--output", "./artifact.skill"]);
 
@@ -1290,4 +1394,46 @@ serialTest("cli index rejects --plain without a selected action group", async ()
 
   assert.equal(result.code, 1);
   assert.match(result.stderr, /index --plain requires --list/);
+});
+
+serialTest("cli index rejects unsafe or incomplete apply flag combinations", async () => {
+  const tempDir = await makeTempDir("skillforge-index-apply-guards-");
+  const indexPath = path.join(tempDir, "index.json");
+  await fs.writeFile(
+    indexPath,
+    JSON.stringify({
+      rootDir: tempDir,
+      artifactDir: path.join(tempDir, "artifacts"),
+      skillCount: 1,
+      summary: {
+        ready: 1,
+        readyWithWarnings: 0,
+        notReady: 0,
+        archiveDrift: 0,
+        releaseChanged: 0,
+        baselineMissing: 0
+      },
+      operationsSummary: {
+        readySkills: ["weather"],
+        readyWithWarningsSkills: [],
+        blockedSkills: [],
+        skillsWithReleaseChanges: [],
+        skillsMissingBaselines: [],
+        driftedArtifacts: []
+      },
+      skills: []
+    })
+  );
+
+  let result = await runCli(["index", indexPath, "--apply"]);
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /index requires --apply to name an action group/);
+
+  result = await runCli(["index", indexPath, "--apply", "ready-skills"]);
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /index --apply only supports actionable groups/);
+
+  result = await runCli(["index", indexPath, "--apply", "missing-baselines", "--commands"]);
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /index does not allow --apply together with --commands/);
 });

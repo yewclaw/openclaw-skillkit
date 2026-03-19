@@ -386,6 +386,8 @@ skillforge index ./artifacts/review-all.index.json
 skillforge index ./artifacts/review-all.index.json --list blocked-skills --plain
 skillforge index ./artifacts/review-all.index.json --list blocked-skills --commands --plain
 skillforge index ./artifacts/review-all.index.json --commands
+skillforge index ./artifacts/review-all.index.json --apply missing-baselines
+skillforge index ./artifacts/review-all.index.json --apply release-changes --yes
 skillforge index ./.skillforge/inspect-all.index.json --list orphaned-baselines --json
 ```
 
@@ -398,6 +400,14 @@ Adding `--commands` upgrades that saved index into a practical follow-up helper.
 - `cp ...` commands to promote current artifacts into a missing baseline directory
 - `rm -f ...` commands for orphaned baseline cleanup
 
+Adding `--apply` closes that loop for the safe file operations that maintainers repeat most often. SkillForge now turns persisted indexes into dry-run maintenance plans for:
+
+- promoting missing baselines from current review or inspect artifacts
+- refreshing matched baseline archives when a release changed and the new artifact is the version you want to keep
+- removing orphaned baseline archives that no longer match anything in the current repo or release set
+
+`--apply` stays intentionally narrow: it only supports those file operations, prints a dry-run plan by default, and requires `--yes` before changing files.
+
 ## Commands
 
 | Command | Purpose |
@@ -408,7 +418,7 @@ Adding `--commands` upgrades that saved index into a practical follow-up helper.
 | `skillforge help pack` | Show single-skill packaging plus repo-wide batch packaging, JSON reporting, index export, and report export. |
 | `skillforge help inspect` | Show single-archive inspection plus repo-scale archive inventory, baseline comparison, entry preview, and report export usage. |
 | `skillforge help review` | Show single-skill and repo-scale review workflows, including baseline comparison and report export usage. |
-| `skillforge help index` | Show how to summarize persisted indexes and emit follow-up maintenance commands. |
+| `skillforge help index` | Show how to summarize persisted indexes, emit follow-up commands, and apply safe baseline maintenance actions. |
 | `skillforge help serve` | Show local studio host and port options. |
 | `skillforge serve` | Start SkillForge Studio. |
 | `npm run benchmark -- --help` | Show benchmark runner flags. |
@@ -432,7 +442,7 @@ The repo keeps the trust boundary explicit:
 - packaged archives include skill metadata plus per-file sizes and hashes, and avoid recursively bundling old `.skill` artifacts
 - `inspect` lets authors and reviewers confirm the manifest from the built artifact itself, compare it against the current source directory for drift, compare it against a previous shipped artifact for release deltas, preview bundled files, and export a review-ready Markdown report
 - `review` provides a single readiness verdict for one skill or a whole repo, covering lint status, archive creation, source-to-artifact parity, release hotspots, artifact inventory, and optional baseline coverage / release delta review before handoff
-- `index` turns saved batch inspect/review indexes into reusable maintainer inputs by exposing script-friendly lists plus concrete cleanup, promotion, and follow-up commands
+- `index` turns saved batch inspect/review indexes into reusable maintainer inputs by exposing script-friendly lists, concrete cleanup/promotion commands, and dry-run/apply baseline maintenance actions
 - fixture-driven tests cover parsing, linting, CLI behavior, and archive contents
 - `npm run verify` runs tests and benchmarks, and also typechecks plus rebuilds `dist/` when the local TypeScript compiler is available
 - GitHub Actions runs the same `npm run verify` command on pushes and pull requests

@@ -5,7 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runIndex = runIndex;
 const node_path_1 = __importDefault(require("node:path"));
+const promises_1 = require("node:fs/promises");
 const fs_1 = require("../lib/fs");
+const fs_2 = require("../lib/fs");
 async function runIndex(indexPath, options) {
     const resolvedIndexPath = node_path_1.default.resolve(indexPath);
     const payload = JSON.parse(await (0, fs_1.readTextFile)(resolvedIndexPath));
@@ -23,8 +25,60 @@ async function runIndex(indexPath, options) {
     const commandGroups = detectedType === "review"
         ? buildReviewCommandGroups(payload)
         : buildInspectCommandGroups(payload);
+    const operationGroups = detectedType === "review"
+        ? buildReviewOperationGroups(payload)
+        : buildInspectOperationGroups(payload);
     const selectedGroup = selectActionGroup(actionGroups, options.listName);
     const selectedCommands = selectedGroup ? commandGroups.get(selectedGroup.name) ?? [] : [];
+    if (options.applyName) {
+        const selectedOperationGroup = selectActionGroup(actionGroups, options.applyName);
+        if (!selectedOperationGroup) {
+            throw new Error(`Unknown action group "${options.applyName}".`);
+        }
+        if (!operationGroups.has(selectedOperationGroup.name)) {
+            throw new Error(`index --apply only supports actionable groups. Use one of: ${[...operationGroups.keys()].join(", ")}.`);
+        }
+        const operations = operationGroups.get(selectedOperationGroup.name) ?? [];
+        const results = await applyOperations(operations, options.confirm === true);
+        const failed = results.filter((result) => result.outcome === "failed").length;
+        if (options.format === "json") {
+            console.log(JSON.stringify({
+                indexPath: resolvedIndexPath,
+                type: detectedType,
+                summary,
+                apply: {
+                    name: selectedOperationGroup.name,
+                    label: selectedOperationGroup.label,
+                    description: selectedOperationGroup.description,
+                    dryRun: options.confirm !== true,
+                    count: results.length,
+                    applied: results.filter((result) => result.outcome === "applied").length,
+                    pending: results.filter((result) => result.outcome === "pending").length,
+                    skipped: results.filter((result) => result.outcome === "skipped").length,
+                    failed,
+                    results
+                }
+            }, null, 2));
+            return failed > 0 ? 1 : 0;
+        }
+        console.log(`Index: ${resolvedIndexPath}`);
+        console.log(`Type: ${summary.headline}`);
+        console.log(`Apply: ${selectedOperationGroup.label}`);
+        console.log(`Mode: ${options.confirm === true ? "execute" : "dry-run"}`);
+        console.log(`Operations: ${results.length}`);
+        if (results.length === 0) {
+            console.log("  none");
+        }
+        else {
+            for (const result of results) {
+                console.log(`  ${formatOperationOutcome(result.outcome)} ${result.label}: ${result.detail}`);
+            }
+        }
+        if (options.confirm !== true && results.some((result) => result.outcome === "pending")) {
+            console.log("Next: re-run with --yes to execute the pending operations.");
+        }
+        return failed > 0 ? 1 : 0;
+    }
     if (options.format === "json") {
         console.log(JSON.stringify({
             indexPath: resolvedIndexPath,
@@ -60,14 +114,14 @@ async function runIndex(indexPath, options) {
                 }
                 : undefined
         }, null, 2));
-        return;
+        return 0;
     }
     if (selectedGroup && options.plain) {
         const plainValues = options.commands ? selectedCommands : selectedGroup.items;
         for (const item of plainValues.slice(0, limit)) {
             console.log(item);
         }
-        return;
+        return 0;
     }
     console.log(`Index: ${resolvedIndexPath}`);
     console.log(`Type: ${summary.headline}`);
@@ -86,12 +140,12 @@ async function runIndex(indexPath, options) {
         if (options.commands) {
             printCommandGroup(selectedCommands, limit);
         }
-        return;
+        return 0;
     }
     const groupsToPrint = actionGroups.filter((group) => group.items.length > 0).slice(0, 5);
     if (groupsToPrint.length === 0) {
         console.log("Actions: no current action items recorded in this index.");
-        return;
+        return 0;
     }
     console.log("Actions:");
     for (const group of groupsToPrint) {
@@ -109,7 +163,7 @@ async function runIndex(indexPath, options) {
             .slice(0, 5);
         if (commandGroupsToPrint.length === 0) {
             console.log("Commands: no follow-up commands available from this index.");
-            return;
+            return 0;
         }
         console.log("Commands:");
         for (const group of commandGroupsToPrint) {
@@ -118,6 +172,7 @@ async function runIndex(indexPath, options) {
             console.log(`  ${group.name}: ${preview.join(" | ")}${suffix}`);
         }
     }
+    return 0;
 }
 function printActionGroup(group, limit) {
     console.log(`${group.label}: ${group.items.length}`);
@@ -415,6 +470,102 @@ function buildInspectCommandGroups(index) {
         ]
     ]);
 }
+function buildReviewOperationGroups(index) {
+    const skills = index.skills ?? [];
+    const byRelativeDir = new Map(skills.map((skill) => [skill.relativeDir, skill]));
+    return new Map([
+        [
+            "release-changes",
+            buildUniqueOperations(index.operationsSummary.skillsWithReleaseChanges.map((relativeDir) => {
+                const skill = byRelativeDir.get(relativeDir);
+                if (!skill?.archive?.destination || !skill.archive.releaseComparison?.baselineArchivePath) {
+                    return undefined;
+                }
+                return {
+                    mode: "sync-release-baseline",
+                    label: relativeDir,
+                    sourcePath: skill.archive.destination,
+                    targetPath: skill.archive.releaseComparison.baselineArchivePath,
+                    detail: `copy ${skill.archive.destination} -> ${skill.archive.releaseComparison.baselineArchivePath}`
+                };
+            }))
+        ],
+        [
+            "missing-baselines",
+            buildUniqueOperations(index.operationsSummary.skillsMissingBaselines.map((relativeDir) => {
+                const skill = byRelativeDir.get(relativeDir);
+                const baselinePath = skill ? resolveReviewBaselinePromotionPath(skill) : undefined;
+                if (!skill?.archive?.destination || !baselinePath) {
+                    return undefined;
+                }
+                return {
+                    mode: "promote-missing-baseline",
+                    label: relativeDir,
+                    sourcePath: skill.archive.destination,
+                    targetPath: baselinePath,
+                    detail: `copy ${skill.archive.destination} -> ${baselinePath}`
+                };
+            }))
+        ],
+        [
+            "orphaned-baselines",
+            buildUniqueOperations((index.baselineSummary?.orphanedArchives ?? []).map((archivePath) => ({
+                mode: "remove-orphaned-baseline",
+                label: node_path_1.default.basename(archivePath),
+                targetPath: archivePath,
+                detail: `remove ${archivePath}`
+            })))
+        ]
+    ]);
+}
+function buildInspectOperationGroups(index) {
+    const archives = index.archives ?? [];
+    const byRelativePath = new Map(archives.map((archive) => [archive.relativePath, archive]));
+    return new Map([
+        [
+            "release-changes",
+            buildUniqueOperations(index.operationsSummary.archivesWithReleaseChanges.map((relativePath) => {
+                const archive = byRelativePath.get(relativePath);
+                if (!archive?.releaseComparison?.baselineArchivePath) {
+                    return undefined;
+                }
+                return {
+                    mode: "sync-release-baseline",
+                    label: relativePath,
+                    sourcePath: archive.archivePath,
+                    targetPath: archive.releaseComparison.baselineArchivePath,
+                    detail: `copy ${archive.archivePath} -> ${archive.releaseComparison.baselineArchivePath}`
+                };
+            }))
+        ],
+        [
+            "missing-baselines",
+            buildUniqueOperations(index.operationsSummary.archivesMissingBaselines.map((relativePath) => {
+                const archive = byRelativePath.get(relativePath);
+                const baselinePath = archive ? resolveInspectBaselinePromotionPath(archive) : undefined;
+                if (!archive || !baselinePath) {
+                    return undefined;
+                }
+                return {
+                    mode: "promote-missing-baseline",
+                    label: relativePath,
+                    sourcePath: archive.archivePath,
+                    targetPath: baselinePath,
+                    detail: `copy ${archive.archivePath} -> ${baselinePath}`
+                };
+            }))
+        ],
+        [
+            "orphaned-baselines",
+            buildUniqueOperations((index.baselineSummary?.orphanedArchives ?? []).map((archivePath) => ({
+                mode: "remove-orphaned-baseline",
+                label: node_path_1.default.basename(archivePath),
+                targetPath: archivePath,
+                detail: `remove ${archivePath}`
+            })))
+        ]
+    ]);
+}
 function resolveReviewBaselinePromotionPath(skill) {
     const requestedDir = skill.baselineLookup?.requestedDir;
     if (!requestedDir) {
@@ -433,6 +584,81 @@ function resolveInspectBaselinePromotionPath(archive) {
 }
 function buildUniqueCommands(commands) {
     return [...new Set(commands.filter((command) => Boolean(command)))];
+}
+function buildUniqueOperations(operations) {
+    const seen = new Set();
+    const unique = [];
+    for (const operation of operations) {
+        if (!operation) {
+            continue;
+        }
+        const key = `${operation.mode}:${operation.sourcePath ?? ""}:${operation.targetPath}`;
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        unique.push(operation);
+    }
+    return unique;
+}
+async function applyOperations(operations, execute) {
+    const results = [];
+    for (const operation of operations) {
+        if (operation.mode === "remove-orphaned-baseline") {
+            const targetExists = await (0, fs_2.exists)(operation.targetPath);
+            if (!targetExists) {
+                results.push({ ...operation, outcome: "skipped", detail: `${operation.detail} (already absent)` });
+                continue;
+            }
+            if (!execute) {
+                results.push(operationAsResult(operation, "pending"));
+                continue;
+            }
+            await (0, promises_1.rm)(operation.targetPath, { force: true });
+            results.push(operationAsResult(operation, "applied"));
+            continue;
+        }
+        if (!operation.sourcePath) {
+            results.push({ ...operation, outcome: "failed", detail: `${operation.detail} (missing source path)` });
+            continue;
+        }
+        const sourceExists = await (0, fs_2.exists)(operation.sourcePath);
+        if (!sourceExists) {
+            results.push({ ...operation, outcome: "failed", detail: `${operation.detail} (source missing)` });
+            continue;
+        }
+        const targetExists = await (0, fs_2.exists)(operation.targetPath);
+        if (operation.mode === "promote-missing-baseline" && targetExists) {
+            results.push({ ...operation, outcome: "skipped", detail: `${operation.detail} (target already exists)` });
+            continue;
+        }
+        if (!execute) {
+            results.push(operationAsResult(operation, "pending"));
+            continue;
+        }
+        await (0, fs_2.ensureDir)(node_path_1.default.dirname(operation.targetPath));
+        await (0, promises_1.copyFile)(operation.sourcePath, operation.targetPath);
+        results.push(operationAsResult(operation, "applied"));
+    }
+    return results;
+}
+function operationAsResult(operation, outcome) {
+    return {
+        ...operation,
+        outcome
+    };
+}
+function formatOperationOutcome(outcome) {
+    switch (outcome) {
+        case "applied":
+            return "APPLY";
+        case "pending":
+            return "PLAN";
+        case "skipped":
+            return "SKIP ";
+        case "failed":
+            return "FAIL ";
+    }
 }
 function shellQuote(value) {
     if (/^[A-Za-z0-9_./:-]+$/.test(value)) {
